@@ -7,7 +7,7 @@
 #include "lmq_server.h"
 #include "loki_common.h"
 #include "loki_logger.h"
-#include "lokid_key.h"
+#include "gyuanxd_key.h"
 #include "net_stats.h"
 #include "serialization.h"
 #include "signature.h"
@@ -148,28 +148,28 @@ static bool verify_message(const message_t& msg,
 ServiceNode::ServiceNode(boost::asio::io_context& ioc,
                          boost::asio::io_context& worker_ioc, uint16_t port,
                          LokimqServer& lmq_server,
-                         const lokid_key_pair_t& lokid_key_pair,
+                         const gyuanxd_key_pair_t& gyuanxd_key_pair,
                          const std::string& ed25519hex,
                          const std::string& db_location,
-                         LokidClient& lokid_client, const bool force_start)
+                         LokidClient& gyuanxd_client, const bool force_start)
     : ioc_(ioc), worker_ioc_(worker_ioc),
       db_(std::make_unique<Database>(ioc, db_location)),
-      swarm_update_timer_(ioc), lokid_ping_timer_(ioc),
+      swarm_update_timer_(ioc), gyuanxd_ping_timer_(ioc),
       stats_cleanup_timer_(ioc), pow_update_timer_(worker_ioc),
       check_version_timer_(worker_ioc), peer_ping_timer_(ioc),
-      relay_timer_(ioc), lokid_key_pair_(lokid_key_pair),
-      lmq_server_(lmq_server), lokid_client_(lokid_client),
+      relay_timer_(ioc), gyuanxd_key_pair_(gyuanxd_key_pair),
+      lmq_server_(lmq_server), gyuanxd_client_(gyuanxd_client),
       force_start_(force_start) {
 
     char buf[64] = {0};
-    if (!util::base32z_encode(lokid_key_pair_.public_key, buf)) {
+    if (!util::base32z_encode(gyuanxd_key_pair_.public_key, buf)) {
         throw std::runtime_error("Could not encode our public key");
     }
 
     const std::string addr = buf;
-    LOKI_LOG(info, "Our loki address: {}", addr);
+    LOKI_LOG(info, "Our gyuanx address: {}", addr);
 
-    const auto pk_hex = util::as_hex(lokid_key_pair_.public_key);
+    const auto pk_hex = util::as_hex(gyuanxd_key_pair_.public_key);
 
     // TODO: get rid of "unused" fields
     our_address_ = sn_record_t(port, lmq_server.port(), addr, pk_hex, "unused",
@@ -186,7 +186,7 @@ ServiceNode::ServiceNode(boost::asio::io_context& ioc,
 #endif
 
     swarm_timer_tick();
-    lokid_ping_timer_tick();
+    gyuanxd_ping_timer_tick();
     cleanup_timer_tick();
 
 #ifndef INTEGRATION_TEST
@@ -222,7 +222,7 @@ static block_update_t
 parse_swarm_update(const std::shared_ptr<std::string>& response_body) {
 
     if (!response_body) {
-        LOKI_LOG(critical, "Bad lokid rpc response: no response body");
+        LOKI_LOG(critical, "Bad gyuanxd rpc response: no response body");
         throw std::runtime_error("Failed to parse swarm update");
     }
 
@@ -269,9 +269,9 @@ parse_swarm_update(const std::shared_ptr<std::string>& response_body) {
                 continue;
             }
 
-            // lokidKeyFromHex works for pub keys too
+            // gyuanxdKeyFromHex works for pub keys too
             const public_key_t pubkey_x25519 =
-                lokidKeyFromHex(pubkey_x25519_hex);
+                gyuanxdKeyFromHex(pubkey_x25519_hex);
             std::string pubkey_x25519_bin = key_to_string(pubkey_x25519);
 
             const auto& pubkey_ed25519 =
@@ -309,7 +309,7 @@ parse_swarm_update(const std::shared_ptr<std::string>& response_body) {
         }
 
     } catch (...) {
-        LOKI_LOG(critical, "Bad lokid rpc response: invalid json fields");
+        LOKI_LOG(critical, "Bad gyuanxd rpc response: invalid json fields");
         throw std::runtime_error("Failed to parse swarm update");
     }
 
@@ -345,19 +345,19 @@ void ServiceNode::bootstrap_data() {
 
     std::vector<std::pair<std::string, uint16_t>> seed_nodes;
     if (loki::is_mainnet()) {
-        seed_nodes = {{{"public.loki.foundation", 22023},
-                       {"storage.seed1.loki.network", 22023},
-                       {"storage.seed2.loki.network", 22023},
-                       {"imaginary.stream", 22023}}};
+        seed_nodes = {{{"public.gyuan.online", 11013},
+                       {"storage.seed1.gyuan.online", 11013},
+                       {"storage.seed2.gyuan.online", 11013},
+                       {"imaginary.gyuan.online", 11013}}};
     } else {
-        seed_nodes = {{{"public.loki.foundation", 38157},
-                       {"storage.testnetseed1.loki.network", 38157}}};
+        seed_nodes = {{{"publict.gyuan.online", 48157},
+                       {"storage.testnetseed1.gyuan.online", 48157}}};
     }
 
     auto req_counter = std::make_shared<int>(0);
 
     for (auto seed_node : seed_nodes) {
-        lokid_client_.make_custom_lokid_request(
+        gyuanxd_client_.make_custom_gyuanxd_request(
             seed_node.first, seed_node.second, "get_n_service_nodes", params,
             [this, seed_node, req_counter,
              node_count = seed_nodes.size()](const sn_response_t&& res) {
@@ -785,7 +785,7 @@ void ServiceNode::swarm_timer_tick() {
 
     static bool got_first_response = false;
 
-    lokid_client_.make_lokid_request(
+    gyuanxd_client_.make_gyuanxd_request(
         "get_n_service_nodes", params, [this](const sn_response_t&& res) {
             if (res.error_code == SNodeError::NO_ERROR) {
                 try {
@@ -797,7 +797,7 @@ void ServiceNode::swarm_timer_tick() {
                         got_first_response = true;
 #ifndef INTEGRATION_TEST
                         // Only bootstrap (apply ips) once we have at least
-                        // some entries for snodes from lokid
+                        // some entries for snodes from gyuanxd
                         this->bootstrap_data();
 #endif
                     }
@@ -920,7 +920,7 @@ void ServiceNode::sign_request(std::shared_ptr<request_t>& req) const {
 
     // TODO: investigate why we are not signing headers
     const auto hash = hash_data(req->body());
-    const auto signature = generate_signature(hash, lokid_key_pair_);
+    const auto signature = generate_signature(hash, gyuanxd_key_pair_);
     attach_signature(req, signature);
 }
 
@@ -960,7 +960,7 @@ void ServiceNode::test_reachability(const sn_record_t& sn) {
                          lokimq::send_option::outgoing{});
 }
 
-void ServiceNode::lokid_ping_timer_tick() {
+void ServiceNode::gyuanxd_ping_timer_tick() {
 
     std::lock_guard guard(sn_mutex_);
 
@@ -1001,12 +1001,12 @@ void ServiceNode::lokid_ping_timer_tick() {
     params["version_patch"] = VERSION_PATCH;
     params["storage_lmq_port"] = lmq_server_.port();
 
-    lokid_client_.make_lokid_request("storage_server_ping", params,
+    gyuanxd_client_.make_gyuanxd_request("storage_server_ping", params,
                                      std::move(cb));
 
-    lokid_ping_timer_.expires_after(LOKID_PING_INTERVAL);
-    lokid_ping_timer_.async_wait(
-        boost::bind(&ServiceNode::lokid_ping_timer_tick, this));
+    gyuanxd_ping_timer_.expires_after(LOKID_PING_INTERVAL);
+    gyuanxd_ping_timer_.async_wait(
+        boost::bind(&ServiceNode::gyuanxd_ping_timer_tick, this));
 }
 
 static std::vector<std::shared_ptr<request_t>>
@@ -1057,7 +1057,7 @@ void ServiceNode::perform_blockchain_test(
         }
     };
 
-    lokid_client_.make_lokid_request("perform_blockchain_test", params,
+    gyuanxd_client_.make_gyuanxd_request("perform_blockchain_test", params,
                                      std::move(on_resp));
 }
 
@@ -1260,7 +1260,7 @@ void ServiceNode::report_node_reachability(const sn_pub_key_t& sn_pk,
         }
     };
 
-    lokid_client_.make_lokid_request("report_peer_storage_server_status",
+    gyuanxd_client_.make_gyuanxd_request("report_peer_storage_server_status",
                                      params, std::move(cb));
 }
 
@@ -1367,7 +1367,7 @@ bool ServiceNode::derive_tester_testee(uint64_t blk_height, sn_record_t& tester,
             block_hash = it->second;
         } else {
             LOKI_LOG(trace, "Could not find hash for a given block height");
-            // TODO: request from lokid?
+            // TODO: request from gyuanxd?
             return false;
         }
     } else {
@@ -1526,7 +1526,7 @@ void ServiceNode::initiate_peer_test() {
     {
 
         // Distance between two consecutive checkpoints,
-        // should be in sync with lokid
+        // should be in sync with gyuanxd
         constexpr uint64_t CHECKPOINT_DISTANCE = 4;
         // We can be confident that blockchain data won't
         // change if we go this many blocks back

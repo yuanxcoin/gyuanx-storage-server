@@ -16,7 +16,7 @@
 #include <boost/format.hpp>
 
 #include "loki_common.h"
-#include "lokid_key.h"
+#include "gyuanxd_key.h"
 #include "swarm.h"
 
 constexpr auto LOKI_SENDER_SNODE_PUBKEY_HEADER = "X-Loki-Snode-PubKey";
@@ -95,20 +95,20 @@ using http_callback_t = std::function<void(sn_response_t)>;
 class LokidClient {
 
     boost::asio::io_context& ioc_;
-    std::string lokid_rpc_ip_;
-    const uint16_t lokid_rpc_port_;
+    std::string gyuanxd_rpc_ip_;
+    const uint16_t gyuanxd_rpc_port_;
 
   public:
     LokidClient(boost::asio::io_context& ioc, std::string ip, uint16_t port);
-    void make_lokid_request(std::string_view method,
+    void make_gyuanxd_request(std::string_view method,
                             const nlohmann::json& params,
                             http_callback_t&& cb) const;
-    void make_custom_lokid_request(const std::string& daemon_ip,
+    void make_custom_gyuanxd_request(const std::string& daemon_ip,
                                    const uint16_t daemon_port,
                                    std::string_view method,
                                    const nlohmann::json& params,
                                    http_callback_t&& cb) const;
-    // Synchronously fetches the private key from lokid.  Designed to be called
+    // Synchronously fetches the private key from gyuanxd.  Designed to be called
     // *before* the io_context has been started (this runs it, waits for a
     // successful fetch, then restarts it when finished).
     std::tuple<private_key_t, private_key_ed25519_t, private_key_t>

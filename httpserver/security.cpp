@@ -1,12 +1,12 @@
 #include "security.h"
-#include "lokid_key.h"
+#include "gyuanxd_key.h"
 #include "signature.h"
 
 #include "utils.hpp"
 #include <fstream>
 
 namespace loki {
-Security::Security(const lokid_key_pair_t& key_pair,
+Security::Security(const gyuanxd_key_pair_t& key_pair,
                    const boost::filesystem::path& base_path)
     : key_pair_(key_pair), base_path_(base_path) {}
 

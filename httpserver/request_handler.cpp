@@ -28,9 +28,9 @@ std::string to_string(const Response& res) {
 }
 
 RequestHandler::RequestHandler(boost::asio::io_context& ioc, ServiceNode& sn,
-                               const LokidClient& lokid_client,
+                               const LokidClient& gyuanxd_client,
                                const ChannelEncryption<std::string>& ce)
-    : ioc_(ioc), service_node_(sn), lokid_client_(lokid_client),
+    : ioc_(ioc), service_node_(sn), gyuanxd_client_(gyuanxd_client),
       channel_cipher_(ce) {}
 
 static json snodes_to_json(const std::vector<sn_record_t>& snodes) {
@@ -403,22 +403,22 @@ void RequestHandler::process_lns_request(
     params["entries"] = array;
 
     // this should not be called "sn response"
-    auto on_lokid_res = [cb = std::move(cb)](sn_response_t sn) {
+    auto on_gyuanxd_res = [cb = std::move(cb)](sn_response_t sn) {
         if (sn.error_code == SNodeError::NO_ERROR && sn.body) {
             cb({Status::OK, *sn.body});
         } else {
-            cb({Status::BAD_REQUEST, "unknown lokid error"});
+            cb({Status::BAD_REQUEST, "unknown gyuanxd error"});
         }
     };
 
 #ifdef INTEGRATION_TEST
     // use mainnet seed
-    lokid_client_.make_custom_lokid_request("public.loki.foundation", 22023,
+    gyuanxd_client_.make_custom_gyuanxd_request("public.gyuan.online", 11013,
                                             "lns_names_to_owners", params,
-                                            std::move(on_lokid_res));
+                                            std::move(on_gyuanxd_res));
 #else
-    lokid_client_.make_lokid_request("lns_names_to_owners", params,
-                                     std::move(on_lokid_res));
+    gyuanxd_client_.make_gyuanxd_request("lns_names_to_owners", params,
+                                     std::move(on_gyuanxd_res));
 #endif
 }
 

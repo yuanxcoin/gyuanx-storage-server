@@ -95,17 +95,17 @@ void make_http_request(boost::asio::io_context& ioc, const std::string& address,
 // ======================== Lokid Client ========================
 LokidClient::LokidClient(boost::asio::io_context& ioc, std::string ip,
                          uint16_t port)
-    : ioc_(ioc), lokid_rpc_ip_(std::move(ip)), lokid_rpc_port_(port) {}
+    : ioc_(ioc), gyuanxd_rpc_ip_(std::move(ip)), gyuanxd_rpc_port_(port) {}
 
-void LokidClient::make_lokid_request(std::string_view method,
+void LokidClient::make_gyuanxd_request(std::string_view method,
                                      const nlohmann::json& params,
                                      http_callback_t&& cb) const {
 
-    make_custom_lokid_request(lokid_rpc_ip_, lokid_rpc_port_, method, params,
+    make_custom_gyuanxd_request(gyuanxd_rpc_ip_, gyuanxd_rpc_port_, method, params,
                               std::move(cb));
 }
 
-void LokidClient::make_custom_lokid_request(const std::string& daemon_ip,
+void LokidClient::make_custom_gyuanxd_request(const std::string& daemon_ip,
                                             const uint16_t daemon_port,
                                             std::string_view method,
                                             const nlohmann::json& params,
@@ -126,7 +126,7 @@ void LokidClient::make_custom_lokid_request(const std::string& daemon_ip,
     req->target(target);
     req->prepare_payload();
 
-    LOKI_LOG(trace, "Making lokid request, method: {}", std::string(method));
+    LOKI_LOG(trace, "Making gyuanxd request, method: {}", std::string(method));
 
     make_http_request(ioc_, daemon_ip, daemon_port, req, std::move(cb));
 }
@@ -141,12 +141,12 @@ static bool validateHexKey(const std::string& key,
 
 std::tuple<private_key_t, private_key_ed25519_t, private_key_t>
 LokidClient::wait_for_privkey() {
-    // fetch SN private key from lokid; do this synchronously because we can't
+    // fetch SN private key from gyuanxd; do this synchronously because we can't
     // finish startup until we have it.
     loki::private_key_t private_key;
     loki::private_key_ed25519_t private_key_ed;
     loki::private_key_t private_key_x;
-    LOKI_LOG(info, "Retrieving SN key from lokid");
+    LOKI_LOG(info, "Retrieving SN key from gyuanxd");
     boost::asio::steady_timer delay{ioc_};
     std::function<void(loki::sn_response_t && res)> key_fetch;
     key_fetch = [&](loki::sn_response_t res) {
@@ -172,29 +172,29 @@ LokidClient::wait_for_privkey() {
                     !validateHexKey(privkey_x))
                     throw std::runtime_error("returned value is not hex");
                 else {
-                    private_key = loki::lokidKeyFromHex(legacy_privkey);
+                    private_key = loki::gyuanxdKeyFromHex(legacy_privkey);
                     // TODO: check that one is derived from the other as a
                     // sanity check?
                     private_key_ed =
                         private_key_ed25519_t::from_hex(privkey_ed);
-                    private_key_x = loki::lokidKeyFromHex(privkey_x);
+                    private_key_x = loki::gyuanxdKeyFromHex(privkey_x);
                     // run out of work, which will end the event loop
                 }
             }
         } catch (const std::exception& e) {
             LOKI_LOG(critical,
-                     "Error retrieving SN privkey from lokid @ {}:{}: {}.  Is "
-                     "lokid running?  Retrying in 5s",
-                     lokid_rpc_ip_, lokid_rpc_port_, e.what());
+                     "Error retrieving SN privkey from gyuanxd @ {}:{}: {}.  Is "
+                     "gyuanxd running?  Retrying in 5s",
+                     gyuanxd_rpc_ip_, gyuanxd_rpc_port_, e.what());
 
             delay.expires_after(std::chrono::seconds{5});
             delay.async_wait([this,
                               &key_fetch](const boost::system::error_code&) {
-                make_lokid_request("get_service_node_privkey", {}, key_fetch);
+                make_gyuanxd_request("get_service_node_privkey", {}, key_fetch);
             });
         }
     };
-    make_lokid_request("get_service_node_privkey", {}, key_fetch);
+    make_gyuanxd_request("get_service_node_privkey", {}, key_fetch);
     ioc_.run(); // runs until we get success above
     ioc_.restart();
 

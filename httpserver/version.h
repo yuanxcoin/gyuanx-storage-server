@@ -30,7 +30,7 @@
 
 inline std::string version_info() {
     return fmt::format(
-        "Loki Storage Server v{}\n git commit hash: {}\n build time: {}\n",
+        "Gyuanx Storage Server v{}\n git commit hash: {}\n build time: {}\n",
         STORAGE_SERVER_VERSION_STRING, STORAGE_SERVER_GIT_HASH_STRING,
         STORAGE_SERVER_BUILD_TIME);
 }

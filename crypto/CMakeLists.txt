@@ -6,8 +6,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CXX_STANDARD_REQUIRED ON)
 
 set(SOURCES
-    src/lokid_key.cpp
-    include/lokid_key.h
+    src/gyuanxd_key.cpp
+    include/gyuanxd_key.h
     include/channel_encryption.hpp
     src/channel_encryption.cpp
     src/signature.cpp

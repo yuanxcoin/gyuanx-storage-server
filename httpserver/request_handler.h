@@ -74,7 +74,7 @@ std::string to_string(const Response& res);
 class RequestHandler {
 
     ServiceNode& service_node_;
-    const LokidClient& lokid_client_;
+    const LokidClient& gyuanxd_client_;
     const ChannelEncryption<std::string>& channel_cipher_;
 
     boost::asio::io_context& ioc_;
@@ -110,7 +110,7 @@ class RequestHandler {
 
   public:
     RequestHandler(boost::asio::io_context& ioc, ServiceNode& sn,
-                   const LokidClient& lokid_client,
+                   const LokidClient& gyuanxd_client,
                    const ChannelEncryption<std::string>& ce);
 
     // Process all Session client requests

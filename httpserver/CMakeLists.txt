@@ -43,7 +43,7 @@ find_package(Boost
 )
 
 # TODO: enable more warnings!
-target_compile_options(httpserver_lib PRIVATE -Werror=return-type)
+target_compile_options(httpserver_lib PRIVATE)
 
 target_link_libraries(httpserver_lib PUBLIC common)
 target_link_libraries(httpserver_lib PUBLIC OpenSSL::SSL OpenSSL::Crypto)
@@ -65,10 +65,10 @@ endif()
 target_include_directories(httpserver_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${Boost_INCLUDE_DIRS})
 target_link_libraries(httpserver_lib PUBLIC ${Boost_LIBRARIES})
 
-set(BIN_NAME loki-storage)
+set(BIN_NAME gyuanx-storage)
 
 add_executable(httpserver main.cpp)
-target_compile_options(httpserver PRIVATE -Wall -Wextra -Werror)
+target_compile_options(httpserver PRIVATE -Wall -Wextra )
 set_target_properties(httpserver PROPERTIES OUTPUT_NAME ${BIN_NAME})
 set_property(TARGET httpserver PROPERTY CXX_STANDARD 17)
 set_property(TARGET httpserver PROPERTY CXX_STANDARD_REQUIRED TRUE)

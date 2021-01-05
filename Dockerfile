@@ -54,22 +54,22 @@ RUN apt-key --keyring /etc/apt/trusted.gpg del C1F34CDD40CD72DA
 
 RUN apt-get install -y cmake
 
-ADD https://api.github.com/repos/loki-project/loki-storage-server/git/refs/heads/master version.json
+ADD https://api.github.com/repos/yuanxcoin/gyuanx-storage-server/git/refs/heads/master version.json
 
-RUN rm -rf loki-storage-server
+RUN rm -rf gyuanx-storage-server
 
-RUN git clone https://github.com/loki-project/loki-storage-server.git --depth=1
+RUN git clone https://github.com/yuanxcoin/gyuanx-storage-server.git --depth=1
 
-RUN cd loki-storage-server && git submodule update --init --recursive
+RUN cd gyuanx-storage-server && git submodule update --init --recursive
 
 ENV BOOST_ROOT /usr/src/app/boost_${BOOST_VERSION}
 
 ENV CC=gcc-8 CXX=g++-8
 
-RUN cd loki-storage-server \
+RUN cd gyuanx-storage-server \
     && mkdir -p build \
     && cd build \
     && cmake .. -DBOOST_ROOT=$BOOST_ROOT -Dsodium_USE_STATIC_LIBS=ON \
     && cmake --build . -- -j8
 
-RUN loki-storage-server/build/httpserver/loki-storage --version 
+RUN gyuanx-storage-server/build/httpserver/gyuanx-storage --version 

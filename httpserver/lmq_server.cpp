@@ -3,7 +3,7 @@
 #include "dev_sink.h"
 #include "loki_common.h"
 #include "loki_logger.h"
-#include "lokid_key.h"
+#include "gyuanxd_key.h"
 #include "request_handler.h"
 #include "service_node.h"
 #include "utils.hpp"
@@ -166,7 +166,7 @@ void LokimqServer::handle_get_stats(lokimq::Message& message) {
 }
 
 void LokimqServer::init(ServiceNode* sn, RequestHandler* rh,
-                        const lokid_key_pair_t& keypair,
+                        const gyuanxd_key_pair_t& keypair,
                         const std::vector<std::string>& stats_access_keys) {
 
     using lokimq::Allow;

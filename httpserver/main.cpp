@@ -2,7 +2,7 @@
 #include "command_line.h"
 #include "http_connection.h"
 #include "loki_logger.h"
-#include "lokid_key.h"
+#include "gyuanxd_key.h"
 #include "rate_limiter.h"
 #include "security.h"
 #include "service_node.h"
@@ -84,9 +84,9 @@ int main(int argc, char* argv[]) {
         if (auto home_dir = get_home_dir()) {
             if (options.testnet) {
                 options.data_dir =
-                    (*home_dir / ".loki" / "testnet" / "storage").string();
+                    (*home_dir / ".gyuanx" / "testnet" / "storage").string();
             } else {
-                options.data_dir = (*home_dir / ".loki" / "storage").string();
+                options.data_dir = (*home_dir / ".gyuanx" / "storage").string();
             }
         }
     }
@@ -115,24 +115,24 @@ int main(int argc, char* argv[]) {
 
     if (options.ip == "127.0.0.1") {
         LOKI_LOG(critical,
-                 "Tried to bind loki-storage to localhost, please bind "
+                 "Tried to bind gyuanx-storage to localhost, please bind "
                  "to outward facing address");
         return EXIT_FAILURE;
     }
 
-    if (options.port == options.lokid_rpc_port) {
+    if (options.port == options.gyuanxd_rpc_port) {
         LOKI_LOG(error, "Storage server port must be different from that of "
-                        "Lokid! Terminating.");
+                        "Gyuanxd! Terminating.");
         exit(EXIT_INVALID_PORT);
     }
 
     LOKI_LOG(info, "Setting log level to {}", options.log_level);
     LOKI_LOG(info, "Setting database location to {}", options.data_dir);
-    LOKI_LOG(info, "Setting Lokid RPC to {}:{}", options.lokid_rpc_ip,
-             options.lokid_rpc_port);
+    LOKI_LOG(info, "Setting Gyuanxd RPC to {}:{}", options.gyuanxd_rpc_ip,
+             options.gyuanxd_rpc_port);
     LOKI_LOG(info, "Https server is listening at {}:{}", options.ip,
              options.port);
-    LOKI_LOG(info, "LokiMQ is listening at {}:{}", options.ip,
+    LOKI_LOG(info, "GyuanxMQ is listening at {}:{}", options.ip,
              options.lmq_port);
 
     boost::asio::io_context ioc{1};
@@ -159,8 +159,8 @@ int main(int argc, char* argv[]) {
 
     try {
 
-        auto lokid_client = loki::LokidClient(ioc, options.lokid_rpc_ip,
-                                              options.lokid_rpc_port);
+        auto gyuanxd_client = loki::LokidClient(ioc, options.gyuanxd_rpc_ip,
+                                              options.gyuanxd_rpc_port);
 
         // Normally we request the key from daemon, but in integrations/swarm
         // testing we are not able to do that, so we extract the key as a
@@ -170,18 +170,18 @@ int main(int argc, char* argv[]) {
         loki::private_key_t private_key_x25519;
 #ifndef INTEGRATION_TEST
         std::tie(private_key, private_key_ed25519, private_key_x25519) =
-            lokid_client.wait_for_privkey();
+            gyuanxd_client.wait_for_privkey();
 #else
-        private_key = loki::lokidKeyFromHex(options.lokid_key);
-        LOKI_LOG(info, "LOKID LEGACY KEY: {}", options.lokid_key);
+        private_key = loki::gyuanxdKeyFromHex(options.gyuanxd_key);
+        LOKI_LOG(info, "LOKID LEGACY KEY: {}", options.gyuanxd_key);
 
-        private_key_x25519 = loki::lokidKeyFromHex(options.lokid_x25519_key);
-        LOKI_LOG(info, "x25519 SECRET KEY: {}", options.lokid_x25519_key);
+        private_key_x25519 = loki::gyuanxdKeyFromHex(options.gyuanxd_x25519_key);
+        LOKI_LOG(info, "x25519 SECRET KEY: {}", options.gyuanxd_x25519_key);
 
         private_key_ed25519 =
-            loki::private_key_ed25519_t::from_hex(options.lokid_ed25519_key);
+            loki::private_key_ed25519_t::from_hex(options.gyuanxd_ed25519_key);
 
-        LOKI_LOG(info, "ed25519 SECRET KEY: {}", options.lokid_ed25519_key);
+        LOKI_LOG(info, "ed25519 SECRET KEY: {}", options.gyuanxd_ed25519_key);
 #endif
 
         const auto public_key = loki::derive_pubkey_legacy(private_key);
@@ -193,7 +193,7 @@ int main(int argc, char* argv[]) {
                                         private_key_x25519.end());
         ChannelEncryption<std::string> channel_encryption(priv);
 
-        loki::lokid_key_pair_t lokid_key_pair{private_key, public_key};
+        loki::gyuanxd_key_pair_t gyuanxd_key_pair{private_key, public_key};
 
         const auto public_key_x25519 =
             loki::derive_pubkey_x25519(private_key_x25519);
@@ -208,7 +208,7 @@ int main(int argc, char* argv[]) {
 
         LOKI_LOG(info, "SN ed25519 pubkey is: {}", pubkey_ed25519_hex);
 
-        loki::lokid_key_pair_t lokid_key_pair_x25519{private_key_x25519,
+        loki::gyuanxd_key_pair_t gyuanxd_key_pair_x25519{private_key_x25519,
                                                      public_key_x25519};
 
         for (const auto& key : options.stats_access_keys) {
@@ -222,19 +222,19 @@ int main(int argc, char* argv[]) {
 
         // TODO: SN doesn't need lokimq_server, just the lmq components
         loki::ServiceNode service_node(ioc, worker_ioc, options.port,
-                                       lokimq_server, lokid_key_pair,
+                                       lokimq_server, gyuanxd_key_pair,
                                        pubkey_ed25519_hex, options.data_dir,
-                                       lokid_client, options.force_start);
+                                       gyuanxd_client, options.force_start);
 
-        loki::RequestHandler request_handler(ioc, service_node, lokid_client,
+        loki::RequestHandler request_handler(ioc, service_node, gyuanxd_client,
                                              channel_encryption);
 
         lokimq_server.init(&service_node, &request_handler,
-                           lokid_key_pair_x25519, options.stats_access_keys);
+                           gyuanxd_key_pair_x25519, options.stats_access_keys);
 
         RateLimiter rate_limiter;
 
-        loki::Security security(lokid_key_pair, options.data_dir);
+        loki::Security security(gyuanxd_key_pair, options.data_dir);
 
 #ifdef ENABLE_SYSTEMD
         sd_notify(0, "READY=1");

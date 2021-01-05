@@ -1,4 +1,4 @@
-#include "lokid_key.h"
+#include "gyuanxd_key.h"
 #include "utils.hpp"
 
 #include <boost/filesystem.hpp>
@@ -14,7 +14,7 @@ namespace fs = boost::filesystem;
 
 namespace loki {
 
-private_key_t lokidKeyFromHex(const std::string& private_key_hex) {
+private_key_t gyuanxdKeyFromHex(const std::string& private_key_hex) {
     if (private_key_hex.size() != KEY_LENGTH * 2)
         throw std::runtime_error("Lokid key data is invalid: expected " +
                                  std::to_string(KEY_LENGTH) + " bytes not " +

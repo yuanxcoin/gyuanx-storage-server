@@ -16,7 +16,7 @@ using lokimq::LokiMQ;
 
 namespace loki {
 
-struct lokid_key_pair_t;
+struct gyuanxd_key_pair_t;
 class ServiceNode;
 class RequestHandler;
 
@@ -56,7 +56,7 @@ class LokimqServer {
 
     // Initialize lokimq
     void init(ServiceNode* sn, RequestHandler* rh,
-              const lokid_key_pair_t& keypair,
+              const gyuanxd_key_pair_t& keypair,
               const std::vector<std::string>& stats_access_key);
 
     uint16_t port() { return port_; }

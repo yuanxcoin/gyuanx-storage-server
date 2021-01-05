@@ -53,7 +53,7 @@ hash hash_data(const std::string& data) {
 }
 
 signature generate_signature(const hash& prefix_hash,
-                             const lokid_key_pair_t& key_pair) {
+                             const gyuanxd_key_pair_t& key_pair) {
     ge_p3 tmp3;
     ec_scalar k;
     s_comm buf;

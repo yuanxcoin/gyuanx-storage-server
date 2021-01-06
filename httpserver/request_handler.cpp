@@ -2,7 +2,7 @@
 #include "channel_encryption.hpp"
 #include "http_connection.h"
 #include "loki_logger.h"
-#include "service_node.h"
+#include "gnode.h"
 #include "utils.hpp"
 
 #include "https_client.h"
@@ -30,7 +30,7 @@ std::string to_string(const Response& res) {
 RequestHandler::RequestHandler(boost::asio::io_context& ioc, ServiceNode& sn,
                                const LokidClient& gyuanxd_client,
                                const ChannelEncryption<std::string>& ce)
-    : ioc_(ioc), service_node_(sn), gyuanxd_client_(gyuanxd_client),
+    : ioc_(ioc), gnode_(sn), gyuanxd_client_(gyuanxd_client),
       channel_cipher_(ce) {}
 
 static json snodes_to_json(const std::vector<sn_record_t>& snodes) {
@@ -64,7 +64,7 @@ static std::string obfuscate_pubkey(const std::string& pk) {
 Response RequestHandler::handle_wrong_swarm(const user_pubkey_t& pubKey) {
 
     const std::vector<sn_record_t> nodes =
-        service_node_.get_snodes_by_pk(pubKey);
+        gnode_.get_snodes_by_pk(pubKey);
     const json res_body = snodes_to_json(nodes);
 
     LOKI_LOG(trace, "Got client request to a wrong swarm");
@@ -116,7 +116,7 @@ Response RequestHandler::process_store(const json& params) {
         return Response{Status::BAD_REQUEST, std::move(msg)};
     }
 
-    if (!service_node_.is_pubkey_for_us(pk)) {
+    if (!gnode_.is_pubkey_for_us(pk)) {
         return this->handle_wrong_swarm(pk);
     }
 
@@ -138,13 +138,13 @@ Response RequestHandler::process_store(const json& params) {
 
     const bool valid_pow =
         checkPoW(nonce, timestamp, ttl, pk.str(), data, messageHash,
-                 service_node_.get_curr_pow_difficulty());
+                 gnode_.get_curr_pow_difficulty());
 #ifndef DISABLE_POW
     if (!valid_pow) {
         LOKI_LOG(debug, "Forbidden. Invalid PoW nonce: {}", nonce);
 
         json res_body;
-        res_body["difficulty"] = service_node_.get_curr_pow_difficulty();
+        res_body["difficulty"] = gnode_.get_curr_pow_difficulty();
 
         return Response{Status::INVALID_POW, res_body.dump(),
                         ContentType::json};
@@ -156,7 +156,7 @@ Response RequestHandler::process_store(const json& params) {
     try {
         const auto msg =
             message_t{pk.str(), data, messageHash, ttlInt, timestampInt, nonce};
-        success = service_node_.process_store(msg);
+        success = gnode_.process_store(msg);
     } catch (std::exception e) {
         LOKI_LOG(critical,
                  "Internal Server Error. Could not store message for {}",
@@ -175,7 +175,7 @@ Response RequestHandler::process_store(const json& params) {
              obfuscate_pubkey(pk.str()));
 
     json res_body;
-    res_body["difficulty"] = service_node_.get_curr_pow_difficulty();
+    res_body["difficulty"] = gnode_.get_curr_pow_difficulty();
 
     return Response{Status::OK, res_body.dump(), ContentType::json};
 }
@@ -184,7 +184,7 @@ Response RequestHandler::process_retrieve_all() {
 
     std::vector<storage::Item> all_entries;
 
-    bool res = service_node_.get_all_messages(all_entries);
+    bool res = gnode_.get_all_messages(all_entries);
 
     if (!res) {
         return Response{Status::INTERNAL_SERVER_ERROR,
@@ -225,7 +225,7 @@ Response RequestHandler::process_snodes_by_pk(const json& params) const {
         return Response{Status::BAD_REQUEST, std::move(msg)};
     }
 
-    const std::vector<sn_record_t> nodes = service_node_.get_snodes_by_pk(pk);
+    const std::vector<sn_record_t> nodes = gnode_.get_snodes_by_pk(pk);
 
     LOKI_LOG(debug, "Snodes by pk size: {}", nodes.size());
 
@@ -260,7 +260,7 @@ Response RequestHandler::process_retrieve(const json& params) {
         return Response{Status::BAD_REQUEST, std::move(msg)};
     }
 
-    if (!service_node_.is_pubkey_for_us(pk)) {
+    if (!gnode_.is_pubkey_for_us(pk)) {
         return this->handle_wrong_swarm(pk);
     }
 
@@ -271,7 +271,7 @@ Response RequestHandler::process_retrieve(const json& params) {
 
     std::vector<storage::Item> items;
 
-    if (!service_node_.retrieve(pk.str(), last_hash, items)) {
+    if (!gnode_.retrieve(pk.str(), last_hash, items)) {
 
         auto msg = fmt::format(
             "Internal Server Error. Could not retrieve messages for {}",
@@ -428,7 +428,7 @@ void RequestHandler::process_onion_exit(
 
     LOKI_LOG(debug, "Processing onion exit!");
 
-    if (!service_node_.snode_ready()) {
+    if (!gnode_.snode_ready()) {
         cb({Status::SERVICE_UNAVAILABLE, "Snode not ready"});
         return;
     }
@@ -440,7 +440,7 @@ void RequestHandler::process_proxy_exit(
     const std::string& client_key, const std::string& payload,
     std::function<void(loki::Response)> cb) {
 
-    if (!service_node_.snode_ready()) {
+    if (!gnode_.snode_ready()) {
         auto res = Response{Status::SERVICE_UNAVAILABLE, "Snode not ready"};
         cb(wrap_proxy_response(res, client_key, false));
         return;

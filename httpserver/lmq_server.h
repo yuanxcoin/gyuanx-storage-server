@@ -25,7 +25,7 @@ class LokimqServer {
     std::unique_ptr<LokiMQ> lokimq_;
 
     // Has information about current SNs
-    ServiceNode* service_node_;
+    ServiceNode* gnode_;
 
     RequestHandler* request_handler_;
 

@@ -2,7 +2,7 @@
 #include "http_connection.h"
 #include "loki_logger.h"
 
-#include "service_node.h"
+#include "gnode.h"
 
 #include <ostream>
 #include <stdlib.h>

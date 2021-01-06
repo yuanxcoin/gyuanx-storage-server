@@ -5,7 +5,7 @@
 #include "gyuanxd_key.h"
 #include "rate_limiter.h"
 #include "security.h"
-#include "service_node.h"
+#include "gnode.h"
 #include "swarm.h"
 #include "utils.hpp"
 #include "version.h"
@@ -173,7 +173,7 @@ int main(int argc, char* argv[]) {
             gyuanxd_client.wait_for_privkey();
 #else
         private_key = loki::gyuanxdKeyFromHex(options.gyuanxd_key);
-        LOKI_LOG(info, "LOKID LEGACY KEY: {}", options.gyuanxd_key);
+        LOKI_LOG(info, "GYUANXD LEGACY KEY: {}", options.gyuanxd_key);
 
         private_key_x25519 = loki::gyuanxdKeyFromHex(options.gyuanxd_x25519_key);
         LOKI_LOG(info, "x25519 SECRET KEY: {}", options.gyuanxd_x25519_key);
@@ -185,7 +185,7 @@ int main(int argc, char* argv[]) {
 #endif
 
         const auto public_key = loki::derive_pubkey_legacy(private_key);
-        LOKI_LOG(info, "Retrieved keys from Lokid; our SN pubkey is: {}",
+        LOKI_LOG(info, "Retrieved keys from Gyuanxd; our SN pubkey is: {}",
                  util::as_hex(public_key));
 
         // TODO: avoid conversion to vector
@@ -216,20 +216,20 @@ int main(int argc, char* argv[]) {
         }
 
         // We pass port early because we want to send it in the first ping to
-        // Lokid (in ServiceNode's constructor), but don't want to initialize
+        // Gyuanxd (in ServiceNode's constructor), but don't want to initialize
         // the rest of lmq server before we have a reference to ServiceNode
         loki::LokimqServer lokimq_server(options.lmq_port);
 
         // TODO: SN doesn't need lokimq_server, just the lmq components
-        loki::ServiceNode service_node(ioc, worker_ioc, options.port,
+        loki::ServiceNode gnode(ioc, worker_ioc, options.port,
                                        lokimq_server, gyuanxd_key_pair,
                                        pubkey_ed25519_hex, options.data_dir,
                                        gyuanxd_client, options.force_start);
 
-        loki::RequestHandler request_handler(ioc, service_node, gyuanxd_client,
+        loki::RequestHandler request_handler(ioc, gnode, gyuanxd_client,
                                              channel_encryption);
 
-        lokimq_server.init(&service_node, &request_handler,
+        lokimq_server.init(&gnode, &request_handler,
                            gyuanxd_key_pair_x25519, options.stats_access_keys);
 
         RateLimiter rate_limiter;
@@ -239,11 +239,11 @@ int main(int argc, char* argv[]) {
 #ifdef ENABLE_SYSTEMD
         sd_notify(0, "READY=1");
         boost::asio::steady_timer systemd_watchdog_timer(ioc);
-        systemd_watchdog_tick(systemd_watchdog_timer, service_node);
+        systemd_watchdog_tick(systemd_watchdog_timer, gnode);
 #endif
 
         loki::http_server::run(ioc, options.ip, options.port, options.data_dir,
-                               service_node, request_handler, rate_limiter,
+                               gnode, request_handler, rate_limiter,
                                security);
     } catch (const std::exception& e) {
         // It seems possible for logging to throw its own exception,

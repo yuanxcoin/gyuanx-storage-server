@@ -7,7 +7,7 @@
 #include "security.h"
 #include "serialization.h"
 #include "server_certificates.h"
-#include "service_node.h"
+#include "gnode.h"
 #include "signature.h"
 #include "utils.hpp"
 
@@ -158,13 +158,13 @@ LokidClient::wait_for_privkey() {
             else {
                 auto r = nlohmann::json::parse(*res.body);
                 const auto& legacy_privkey = r.at("result")
-                                                 .at("service_node_privkey")
+                                                 .at("gnode_privkey")
                                                  .get_ref<const std::string&>();
                 const auto& privkey_ed = r.at("result")
-                                             .at("service_node_ed25519_privkey")
+                                             .at("gnode_ed25519_privkey")
                                              .get_ref<const std::string&>();
                 const auto& privkey_x = r.at("result")
-                                            .at("service_node_x25519_privkey")
+                                            .at("gnode_x25519_privkey")
                                             .get_ref<const std::string&>();
                 if (!validateHexKey(legacy_privkey) ||
                     !validateHexKey(privkey_ed,
@@ -190,11 +190,11 @@ LokidClient::wait_for_privkey() {
             delay.expires_after(std::chrono::seconds{5});
             delay.async_wait([this,
                               &key_fetch](const boost::system::error_code&) {
-                make_gyuanxd_request("get_service_node_privkey", {}, key_fetch);
+                make_gyuanxd_request("get_gnode_privkey", {}, key_fetch);
             });
         }
     };
-    make_gyuanxd_request("get_service_node_privkey", {}, key_fetch);
+    make_gyuanxd_request("get_gnode_privkey", {}, key_fetch);
     ioc_.run(); // runs until we get success above
     ioc_.restart();
 
@@ -288,7 +288,7 @@ connection_t::connection_t(boost::asio::io_context& ioc, ssl::context& ssl_ctx,
                            RequestHandler& rh, RateLimiter& rate_limiter,
                            const Security& security)
     : ioc_(ioc), ssl_ctx_(ssl_ctx), socket_(std::move(socket)),
-      stream_(socket_, ssl_ctx_), service_node_(sn), request_handler_(rh),
+      stream_(socket_, ssl_ctx_), gnode_(sn), request_handler_(rh),
       rate_limiter_(rate_limiter), repeat_timer_(ioc),
       deadline_(ioc, SESSION_TIME_LIMIT), notification_ctx_{std::nullopt},
       security_(security) {
@@ -420,7 +420,7 @@ bool connection_t::validate_snode_request() {
 
     /// Known service node
     const std::string snode_address = public_key_b32z + ".snode";
-    if (!service_node_.is_snode_address_known(snode_address)) {
+    if (!gnode_.is_snode_address_known(snode_address)) {
         body_stream_ << "Unknown service node\n";
         LOKI_LOG(debug, "Discarding signature from unknown service node: {}",
                  public_key_b32z);
@@ -456,7 +456,7 @@ void connection_t::process_storage_test_req(uint64_t height,
     /// that! This is done implicitly to some degree using
     /// `block_hashes_cache_`, which holds a limited number of recent blocks
     /// only and fails if an earlier block is requested
-    const MessageTestStatus status = service_node_.process_storage_test_req(
+    const MessageTestStatus status = gnode_.process_storage_test_req(
         height, tester_pk, msg_hash, answer);
     const auto elapsed_time =
         std::chrono::steady_clock::now() - start_timestamp_;
@@ -531,7 +531,7 @@ void connection_t::process_blockchain_test_req(uint64_t,
 
     /// TODO: this should first check if tester/testee are correct! (use
     /// `height`)
-    service_node_.perform_blockchain_test(params, std::move(callback));
+    gnode_.perform_blockchain_test(params, std::move(callback));
 }
 
 static void print_headers(const request_t& req) {
@@ -576,7 +576,7 @@ void connection_t::process_onion_req_v2() {
         const auto& ephem_key =
             json_req.at("ephemeral_key").get_ref<const std::string&>();
 
-        service_node_.record_onion_request();
+        gnode_.record_onion_request();
         request_handler_.process_onion_req(res.ciphertext, ephem_key,
                                            on_response, true);
 
@@ -628,7 +628,7 @@ void connection_t::process_onion_req_v1() {
         const auto& ephem_key =
             json_req.at("ephemeral_key").get_ref<const std::string&>();
 
-        service_node_.record_onion_request();
+        gnode_.record_onion_request();
         request_handler_.process_onion_req(ciphertext, ephem_key, on_response);
 
     } catch (const std::exception& e) {
@@ -649,7 +649,7 @@ void connection_t::process_proxy_req() {
 
     LOKI_LOG(debug, "[{}] Processing proxy request: we are first hop", req_idx);
 
-    service_node_.record_proxy_request();
+    gnode_.record_proxy_request();
 
     const request_t& req = this->request_.get();
 
@@ -669,7 +669,7 @@ void connection_t::process_proxy_req() {
 
     LOKI_LOG(debug, "[{}] Destination: {}", req_idx, target_snode_key);
 
-    auto sn = service_node_.find_node_by_ed25519_pk(target_snode_key);
+    auto sn = gnode_.find_node_by_ed25519_pk(target_snode_key);
 
     // TODO: make an https response out of what we got back
     auto on_proxy_response =
@@ -733,7 +733,7 @@ void connection_t::process_proxy_req() {
     LOKI_LOG(debug, "About to send a proxy exit requst, idx: {}", req_counter);
     req_counter += 1;
 
-    service_node_.send_to_sn(*sn, ss_client::ReqMethod::PROXY_EXIT,
+    gnode_.send_to_sn(*sn, ss_client::ReqMethod::PROXY_EXIT,
                              std::move(sn_req), on_proxy_response);
 }
 
@@ -843,7 +843,7 @@ void connection_t::process_swarm_req(std::string_view target) {
     if (target == "/swarms/push_batch/v1") {
 
         response_.result(http::status::ok);
-        service_node_.process_push_batch(req.body());
+        gnode_.process_push_batch(req.body());
 
     } else if (target == "/swarms/storage_test/v1") {
 
@@ -928,7 +928,7 @@ void connection_t::process_swarm_req(std::string_view target) {
 
     } else if (target == "/swarms/ping_test/v1") {
         LOKI_LOG(trace, "Received ping_test");
-        service_node_.update_last_ping(ReachType::HTTP);
+        gnode_.update_last_ping(ReachType::HTTP);
         response_.result(http::status::ok);
     }
 }
@@ -990,7 +990,7 @@ void connection_t::process_request() {
             this->process_swarm_req(target);
             break;
         }
-        if (!service_node_.snode_ready(&reason)) {
+        if (!gnode_.snode_ready(&reason)) {
             LOKI_LOG(debug,
                      "Ignoring post request; storage server not ready: {}",
                      reason);
@@ -1262,7 +1262,7 @@ void connection_t::on_shutdown(boost::system::error_code ec) {
 }
 
 void connection_t::on_get_stats() {
-    this->body_stream_ << service_node_.get_stats_for_session_client();
+    this->body_stream_ << gnode_.get_stats_for_session_client();
     this->response_.result(http::status::ok);
 }
 

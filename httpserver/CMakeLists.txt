@@ -11,7 +11,7 @@ add_library(httpserver_lib STATIC
     main.cpp
     http_connection.cpp
     swarm.cpp
-    service_node.cpp
+    gnode.cpp
     serialization.cpp
     rate_limiter.cpp
     https_client.cpp

@@ -1,5 +1,5 @@
 #include "serialization.h"
-#include "service_node.h"
+#include "gnode.h"
 
 #include <boost/test/unit_test.hpp>
 

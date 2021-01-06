@@ -3,7 +3,7 @@
 /// TODO: should only be aware of messages
 #include "Item.hpp"
 #include "loki_logger.h"
-#include "service_node.h"
+#include "gnode.h"
 
 #include <boost/endian/conversion.hpp>
 #include <boost/format.hpp>

@@ -73,7 +73,7 @@ std::string to_string(const Response& res);
 
 class RequestHandler {
 
-    ServiceNode& service_node_;
+    ServiceNode& gnode_;
     const LokidClient& gyuanxd_client_;
     const ChannelEncryption<std::string>& channel_cipher_;
 

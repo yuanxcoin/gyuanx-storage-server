@@ -26,7 +26,7 @@ class gyuanxdHandler(BaseHTTPRequestHandler):
 
     message = self.rfile.read(int(length))
     j = json.loads(message)
-    if j['method']!= 'get_service_nodes':
+    if j['method']!= 'get_gnodes':
       self.send_response(405)
       self.end_headers()
       return

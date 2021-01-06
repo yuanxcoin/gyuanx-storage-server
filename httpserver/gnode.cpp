@@ -1,4 +1,4 @@
-#include "service_node.h"
+#include "gnode.h"
 
 #include "Database.hpp"
 #include "Item.hpp"
@@ -244,11 +244,11 @@ parse_swarm_update(const std::shared_ptr<std::string>& response_body) {
         if (bu.unchanged)
             return bu;
 
-        const json service_node_states = result.at("service_node_states");
+        const json gnode_states = result.at("gnode_states");
 
-        for (const auto& sn_json : service_node_states) {
+        for (const auto& sn_json : gnode_states) {
             const auto& pubkey =
-                sn_json.at("service_node_pubkey").get_ref<const std::string&>();
+                sn_json.at("gnode_pubkey").get_ref<const std::string&>();
 
             const swarm_id_t swarm_id =
                 sn_json.at("swarm_id").get<swarm_id_t>();
@@ -263,11 +263,6 @@ parse_swarm_update(const std::shared_ptr<std::string>& response_body) {
 
             const auto& pubkey_x25519_hex =
                 sn_json.at("pubkey_x25519").get_ref<const std::string&>();
-
-            if (pubkey_x25519_hex.empty()) {
-                LOKI_LOG(warn, "pubkey_x25519_hex is missing from sn info");
-                continue;
-            }
 
             // gyuanxdKeyFromHex works for pub keys too
             const public_key_t pubkey_x25519 =
@@ -329,7 +324,7 @@ void ServiceNode::bootstrap_data() {
     json params;
     json fields;
 
-    fields["service_node_pubkey"] = true;
+    fields["gnode_pubkey"] = true;
     fields["swarm_id"] = true;
     fields["storage_port"] = true;
     fields["public_ip"] = true;
@@ -358,7 +353,7 @@ void ServiceNode::bootstrap_data() {
 
     for (auto seed_node : seed_nodes) {
         gyuanxd_client_.make_custom_gyuanxd_request(
-            seed_node.first, seed_node.second, "get_n_service_nodes", params,
+            seed_node.first, seed_node.second, "get_n_gnodes", params,
             [this, seed_node, req_counter,
              node_count = seed_nodes.size()](const sn_response_t&& res) {
                 if (res.error_code == SNodeError::NO_ERROR) {
@@ -766,7 +761,7 @@ void ServiceNode::swarm_timer_tick() {
     json params;
     json fields;
 
-    fields["service_node_pubkey"] = true;
+    fields["gnode_pubkey"] = true;
     fields["swarm_id"] = true;
     fields["storage_port"] = true;
     fields["public_ip"] = true;
@@ -786,7 +781,7 @@ void ServiceNode::swarm_timer_tick() {
     static bool got_first_response = false;
 
     gyuanxd_client_.make_gyuanxd_request(
-        "get_n_service_nodes", params, [this](const sn_response_t&& res) {
+        "get_n_gnodes", params, [this](const sn_response_t&& res) {
             if (res.error_code == SNodeError::NO_ERROR) {
                 try {
 

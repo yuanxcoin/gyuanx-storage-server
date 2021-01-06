@@ -28,7 +28,7 @@ constexpr static std::chrono::microseconds FILL_EMPTY_BUCKET_US =
 
 void RateLimiter::fill_bucket(TokenBucket& bucket,
                               std::chrono::steady_clock::time_point now,
-                              bool service_node) {
+                              bool gnode) {
     auto elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(
         now - bucket.last_time_point);
     // clamp elapsed time to how long it takes to fill up the whole bucket
@@ -36,7 +36,7 @@ void RateLimiter::fill_bucket(TokenBucket& bucket,
     elapsed_us = std::min(elapsed_us, FILL_EMPTY_BUCKET_US);
 
     const auto token_period =
-        service_node ? TOKEN_PERIOD_SN_US : TOKEN_PERIOD_US;
+        gnode ? TOKEN_PERIOD_SN_US : TOKEN_PERIOD_US;
 
     const uint32_t token_added = elapsed_us.count() / token_period.count();
     // clamp tokens to bucket size

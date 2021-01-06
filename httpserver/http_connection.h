@@ -194,7 +194,7 @@ class connection_t : public std::enable_shared_from_this<connection_t> {
     bool delay_response_ = false;
 
     // TODO: remove SN, only use Reqeust Handler as a mediator
-    ServiceNode& service_node_;
+    ServiceNode& gnode_;
 
     RequestHandler& request_handler_;
 

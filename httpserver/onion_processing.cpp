@@ -1,7 +1,7 @@
 #include "channel_encryption.hpp"
 #include "loki_logger.h"
 #include "request_handler.h"
-#include "service_node.h"
+#include "gnode.h"
 #include "utils.hpp"
 
 /// This is only included because of `parse_combined_payload`,
@@ -200,7 +200,7 @@ static auto make_status(std::string_view status) -> loki::Status {
     }
 }
 
-static void relay_to_node(const ServiceNode& service_node,
+static void relay_to_node(const ServiceNode& gnode,
                           const RelayToNodeInfo& info,
                           std::function<void(loki::Response)> cb, int req_idx,
                           bool v2) {
@@ -209,7 +209,7 @@ static void relay_to_node(const ServiceNode& service_node,
     const auto& payload = info.ciphertext;
     const auto& ekey = info.ephemeral_key;
 
-    auto dest_node = service_node.find_node_by_ed25519_pk(dest);
+    auto dest_node = gnode.find_node_by_ed25519_pk(dest);
 
     if (!dest_node) {
         auto msg = fmt::format("Next node not found: {}", dest);
@@ -224,7 +224,7 @@ static void relay_to_node(const ServiceNode& service_node,
     req_body["ciphertext"] = payload;
     req_body["ephemeral_key"] = ekey;
 
-    auto on_response = [cb, &service_node](bool success,
+    auto on_response = [cb, &gnode](bool success,
                                            std::vector<std::string> data) {
         // Processing the result we got from upstream
 
@@ -253,10 +253,10 @@ static void relay_to_node(const ServiceNode& service_node,
     LOKI_LOG(debug, "send_onion_to_sn, sn: {} reqidx: {}", *dest_node, req_idx);
 
     if (v2) {
-        service_node.send_onion_to_sn_v2(*dest_node, payload, ekey,
+        gnode.send_onion_to_sn_v2(*dest_node, payload, ekey,
                                          on_response);
     } else {
-        service_node.send_onion_to_sn_v1(*dest_node, payload, ekey,
+        gnode.send_onion_to_sn_v1(*dest_node, payload, ekey,
                                          on_response);
     }
 }
@@ -265,10 +265,10 @@ void RequestHandler::process_onion_req(const std::string& ciphertext,
                                        const std::string& ephem_key,
                                        std::function<void(loki::Response)> cb,
                                        bool v2) {
-    if (!service_node_.snode_ready()) {
+    if (!gnode_.snode_ready()) {
         auto msg =
             fmt::format("Snode not ready: {}",
-                        service_node_.own_address().pubkey_ed25519_hex());
+                        gnode_.own_address().pubkey_ed25519_hex());
         cb(loki::Response{Status::SERVICE_UNAVAILABLE, std::move(msg)});
         return;
     }
@@ -303,7 +303,7 @@ void RequestHandler::process_onion_req(const std::string& ciphertext,
 
     } else if (const auto info = std::get_if<RelayToNodeInfo>(&res)) {
 
-        relay_to_node(this->service_node_, *info, std::move(cb), counter++, v2);
+        relay_to_node(this->gnode_, *info, std::move(cb), counter++, v2);
 
     } else if (const auto info = std::get_if<RelayToServerInfo>(&res)) {
         LOKI_LOG(debug, "We are to forward the request to url: {}{}",

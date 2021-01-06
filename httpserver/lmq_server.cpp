@@ -5,7 +5,7 @@
 #include "loki_logger.h"
 #include "gyuanxd_key.h"
 #include "request_handler.h"
-#include "service_node.h"
+#include "gnode.h"
 #include "utils.hpp"
 
 #include <lokimq/hex.h>
@@ -21,7 +21,7 @@ std::string LokimqServer::peer_lookup(std::string_view pubkey_bin) const {
 
     // TODO: don't create a new string here
     std::optional<sn_record_t> sn =
-        this->service_node_->find_node_by_x25519_bin(std::string(pubkey_bin));
+        this->gnode_->find_node_by_x25519_bin(std::string(pubkey_bin));
 
     if (sn) {
         return fmt::format("tcp://{}:{}", sn->ip(), sn->lmq_port());
@@ -45,7 +45,7 @@ void LokimqServer::handle_sn_data(lokimq::Message& message) {
     }
 
     // TODO: proces push batch should move to "Request handler"
-    service_node_->process_push_batch(ss.str());
+    gnode_->process_push_batch(ss.str());
 
     LOKI_LOG(debug, "[LMQ] send reply");
 
@@ -117,7 +117,7 @@ void LokimqServer::handle_onion_request(lokimq::Message& message, bool v2) {
         // reply code here doesn't actually matter; the ping test only requires
         // that we provide *some* response).
         LOKI_LOG(debug, "Remote pinged me");
-        service_node_->update_last_ping(ReachType::ZMQ);
+        gnode_->update_last_ping(ReachType::ZMQ);
         on_response(loki::Response{Status::OK, "pong"});
         return;
     }
@@ -160,7 +160,7 @@ void LokimqServer::handle_get_stats(lokimq::Message& message) {
 
     LOKI_LOG(debug, "Received get_stats request via LMQ");
 
-    auto payload = service_node_->get_stats();
+    auto payload = gnode_->get_stats();
 
     message.send_reply(payload);
 }
@@ -171,7 +171,7 @@ void LokimqServer::init(ServiceNode* sn, RequestHandler* rh,
 
     using lokimq::Allow;
 
-    service_node_ = sn;
+    gnode_ = sn;
     request_handler_ = rh;
 
     for (const auto& key : stats_access_keys) {
@@ -204,7 +204,7 @@ void LokimqServer::init(ServiceNode* sn, RequestHandler* rh,
     lokimq_.reset(new LokiMQ{pubkey, seckey, true /* is service node */,
                              lookup_fn, logger});
 
-    LOKI_LOG(info, "LokiMQ is listenting on port {}", port_);
+    LOKI_LOG(info, "GyuanxMQ is listenting on port {}", port_);
 
     lokimq_->log_level(lokimq::LogLevel::info);
     // clang-format off

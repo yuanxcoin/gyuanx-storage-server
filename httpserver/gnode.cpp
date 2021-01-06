@@ -788,7 +788,7 @@ void ServiceNode::swarm_timer_tick() {
                     if (!got_first_response) {
                         LOKI_LOG(
                             info,
-                            "Got initial swarm information from local Lokid");
+                            "Got initial swarm information from local Gyuanxd");
                         got_first_response = true;
 #ifndef INTEGRATION_TEST
                         // Only bootstrap (apply ips) once we have at least
@@ -805,7 +805,7 @@ void ServiceNode::swarm_timer_tick() {
                              e.what());
                 }
             } else {
-                LOKI_LOG(critical, "Failed to contact local Lokid");
+                LOKI_LOG(critical, "Failed to contact local Gyuanxd");
             }
 
             // It would make more sense to wait the difference between the time
@@ -891,7 +891,7 @@ void ServiceNode::ping_peers_tick() {
     // TODO: there is an edge case where SS reported some offending
     // nodes, but then restarted, so SS won't give priority to those
     // nodes. SS will still test them eventually (through random selection) and
-    // update Lokid, but this scenario could be made more robust.
+    // update Gyuanxd, but this scenario could be made more robust.
     const auto offline_node = reach_records_.next_to_test();
 
     if (offline_node) {
@@ -959,12 +959,12 @@ void ServiceNode::gyuanxd_ping_timer_tick() {
 
     std::lock_guard guard(sn_mutex_);
 
-    /// TODO: Note that this is not actually an SN response! (but Lokid)
+    /// TODO: Note that this is not actually an SN response! (but Gyuanxd)
     auto cb = [](const sn_response_t&& res) {
         if (res.error_code == SNodeError::NO_ERROR) {
 
             if (!res.body) {
-                LOKI_LOG(critical, "Empty body on Lokid ping");
+                LOKI_LOG(critical, "Empty body on Gyuanxd ping");
                 return;
             }
 
@@ -975,18 +975,18 @@ void ServiceNode::gyuanxd_ping_timer_tick() {
                     res_json.at("result").at("status").get<std::string>();
 
                 if (status == "OK") {
-                    LOKI_LOG(info, "Successfully pinged Lokid");
+                    LOKI_LOG(info, "Successfully pinged Gyuanxd");
                 } else {
-                    LOKI_LOG(critical, "Could not ping Lokid. Status: {}",
+                    LOKI_LOG(critical, "Could not ping Gyuanxd. Status: {}",
                              status);
                 }
             } catch (...) {
                 LOKI_LOG(critical,
-                         "Could not ping Lokid: bad json in response");
+                         "Could not ping Gyuanxd: bad json in response");
             }
 
         } else {
-            LOKI_LOG(critical, "Could not ping Lokid");
+            LOKI_LOG(critical, "Could not ping Gyuanxd");
         }
     };
 
@@ -1022,7 +1022,7 @@ void ServiceNode::perform_blockchain_test(
 
     std::lock_guard guard(sn_mutex_);
 
-    LOKI_LOG(debug, "Delegating blockchain test to Lokid");
+    LOKI_LOG(debug, "Delegating blockchain test to Gyuanxd");
 
     nlohmann::json params;
 
@@ -1031,14 +1031,14 @@ void ServiceNode::perform_blockchain_test(
 
     auto on_resp = [cb = std::move(cb)](const sn_response_t& resp) {
         if (resp.error_code != SNodeError::NO_ERROR || !resp.body) {
-            LOKI_LOG(critical, "Could not send blockchain request to Lokid");
+            LOKI_LOG(critical, "Could not send blockchain request to Gyuanxd");
             return;
         }
 
         const json body = json::parse(*resp.body, nullptr, false);
 
         if (body.is_discarded()) {
-            LOKI_LOG(critical, "Bad Lokid rpc response: invalid json");
+            LOKI_LOG(critical, "Bad Gyuanxd rpc response: invalid json");
             return;
         }
 
@@ -1208,7 +1208,7 @@ void ServiceNode::report_node_reachability(const sn_pub_key_t& sn_pk,
     params["pubkey"] = (*sn).pub_key_hex();
     params["passed"] = reachable;
 
-    /// Note that if Lokid restarts, all its reachability records will be
+    /// Note that if Gyuanxd restarts, all its reachability records will be
     /// updated to "true".
 
     auto cb = [this, sn_pk, reachable](const sn_response_t&& res) {
@@ -1220,7 +1220,7 @@ void ServiceNode::report_node_reachability(const sn_pub_key_t& sn_pk,
         }
 
         if (!res.body) {
-            LOKI_LOG(warn, "Empty body on Lokid report node status");
+            LOKI_LOG(warn, "Empty body on Gyuanxd report node status");
             return;
         }
 
@@ -1269,7 +1269,7 @@ void ServiceNode::process_reach_test_result(const sn_pub_key_t& pk,
         reach_records_.record_reachable(pk, type, true);
 
         // NOTE: We don't need to report healthy nodes that previously has been
-        // not been reported to Lokid as unreachable but I'm worried there might
+        // not been reported to Gyuanxd as unreachable but I'm worried there might
         // be some race conditions, so do it anyway for now.
 
         if (reach_records_.should_report_as(pk, ReportType::GOOD)) {

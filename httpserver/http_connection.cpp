@@ -36,10 +36,10 @@ namespace http = boost::beast::http; // from <boost/beast/http.hpp>
 /// +===========================================
 
 static constexpr auto LOKI_FILE_SERVER_TARGET_HEADER =
-    "X-Loki-File-Server-Target";
-static constexpr auto LOKI_FILE_SERVER_VERB_HEADER = "X-Loki-File-Server-Verb";
+    "X-Gyuanx-File-Server-Target";
+static constexpr auto LOKI_FILE_SERVER_VERB_HEADER = "X-Gyuanx-File-Server-Verb";
 static constexpr auto LOKI_FILE_SERVER_HEADERS_HEADER =
-    "X-Loki-File-Server-Headers";
+    "X-Gyuanx-File-Server-Headers";
 
 using loki::storage::Item;
 
@@ -70,13 +70,6 @@ void make_http_request(boost::asio::io_context& ioc, const std::string& address,
 
     tcp::resolver::iterator destination = resolver.resolve(address, "http", ec);
 
-    if (ec) {
-        LOKI_LOG(error,
-                 "http: Failed to parse the IP address <{}>. Error code = {}. "
-                 "Message: {}",
-                 address, ec.value(), ec.message());
-        return;
-    }
     while (destination != tcp::resolver::iterator()) {
         const tcp::endpoint thisEndpoint = (destination++)->endpoint();
         if (!thisEndpoint.address().is_v4()) {

@@ -221,11 +221,6 @@ ServiceNode::ServiceNode(boost::asio::io_context& ioc,
 static block_update_t
 parse_swarm_update(const std::shared_ptr<std::string>& response_body) {
 
-    if (!response_body) {
-        LOKI_LOG(critical, "Bad gyuanxd rpc response: no response body");
-        throw std::runtime_error("Failed to parse swarm update");
-    }
-
     std::map<swarm_id_t, std::vector<sn_record_t>> swarm_map;
     block_update_t bu;
 
@@ -304,8 +299,7 @@ parse_swarm_update(const std::shared_ptr<std::string>& response_body) {
         }
 
     } catch (...) {
-        LOKI_LOG(critical, "Bad gyuanxd rpc response: invalid json fields");
-        throw std::runtime_error("Failed to parse swarm update");
+
     }
 
     for (auto const& swarm : swarm_map) {

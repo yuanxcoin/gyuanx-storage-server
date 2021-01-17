@@ -34,13 +34,6 @@ void make_https_request(boost::asio::io_context& ioc,
     const auto resolve_results =
         resolver.resolve(sn_address, std::to_string(port), ec);
 #endif
-    if (ec) {
-        LOKI_LOG(error,
-                 "https: Failed to parse the IP address. Error code = {}. "
-                 "Message: {}",
-                 ec.value(), ec.message());
-        return;
-    }
 
     static ssl::context ctx{ssl::context::tlsv12_client};
 

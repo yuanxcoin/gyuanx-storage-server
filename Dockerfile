@@ -58,7 +58,7 @@ ADD https://api.github.com/repos/yuanxcoin/gyuanx-storage-server/git/refs/heads/
 
 RUN rm -rf gyuanx-storage-server
 
-RUN git clone https://github.com/yuanxcoin/gyuanx-storage-server.git --depth=1
+RUN git clone https://github.com/yuanxcoin/gyuanx-storage-server.git --depth=1 -b dev
 
 RUN cd gyuanx-storage-server && git submodule update --init --recursive
 

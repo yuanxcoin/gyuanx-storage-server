@@ -8,7 +8,7 @@
 BOOST_AUTO_TEST_SUITE(signature_unit_test)
 
 BOOST_AUTO_TEST_CASE(it_generates_hashes) {
-    using namespace loki;
+    using namespace gyuanx;
 
     std::vector<hash> hashes;
 
@@ -29,7 +29,7 @@ BOOST_AUTO_TEST_CASE(it_generates_hashes) {
 }
 
 BOOST_AUTO_TEST_CASE(it_signs_and_verifies) {
-    using namespace loki;
+    using namespace gyuanx;
 
     const auto hash = hash_data("This is the payload");
     const public_key_t public_key{227, 91,  124, 245, 5,   120, 69,  40,
@@ -47,7 +47,7 @@ BOOST_AUTO_TEST_CASE(it_signs_and_verifies) {
 }
 
 BOOST_AUTO_TEST_CASE(it_signs_and_verifies_encoded_inputs) {
-    using namespace loki;
+    using namespace gyuanx;
 
     const auto hash = hash_data("This is the payload");
     const public_key_t public_key{227, 91,  124, 245, 5,   120, 69,  40,
@@ -76,7 +76,7 @@ BOOST_AUTO_TEST_CASE(it_signs_and_verifies_encoded_inputs) {
 }
 
 BOOST_AUTO_TEST_CASE(it_rejects_wrong_signature) {
-    using namespace loki;
+    using namespace gyuanx;
 
     const auto hash = hash_data("This is the payload");
     const public_key_t public_key{227, 91,  124, 245, 5,   120, 69,  40,

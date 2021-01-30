@@ -7,7 +7,7 @@
 #include "security.h"
 #include "serialization.h"
 #include "server_certificates.h"
-#include "gnode.h"
+#include "service_node.h"
 #include "signature.h"
 #include "utils.hpp"
 
@@ -35,17 +35,17 @@ namespace http = boost::beast::http; // from <boost/beast/http.hpp>
 
 /// +===========================================
 
-static constexpr auto LOKI_FILE_SERVER_TARGET_HEADER =
+static constexpr auto GYUANX_FILE_SERVER_TARGET_HEADER =
     "X-Gyuanx-File-Server-Target";
-static constexpr auto LOKI_FILE_SERVER_VERB_HEADER = "X-Gyuanx-File-Server-Verb";
-static constexpr auto LOKI_FILE_SERVER_HEADERS_HEADER =
+static constexpr auto GYUANX_FILE_SERVER_VERB_HEADER = "X-Gyuanx-File-Server-Verb";
+static constexpr auto GYUANX_FILE_SERVER_HEADERS_HEADER =
     "X-Gyuanx-File-Server-Headers";
 
-using loki::storage::Item;
+using gyuanx::storage::Item;
 
 using error_code = boost::system::error_code;
 
-namespace loki {
+namespace gyuanx {
 
 constexpr auto TEST_RETRY_PERIOD = std::chrono::milliseconds(50);
 
@@ -85,12 +85,12 @@ void make_http_request(boost::asio::io_context& ioc, const std::string& address,
     session->start();
 }
 
-// ======================== Lokid Client ========================
-LokidClient::LokidClient(boost::asio::io_context& ioc, std::string ip,
+// ======================== Gyuanxd Client ========================
+GyuanxdClient::GyuanxdClient(boost::asio::io_context& ioc, std::string ip,
                          uint16_t port)
     : ioc_(ioc), gyuanxd_rpc_ip_(std::move(ip)), gyuanxd_rpc_port_(port) {}
 
-void LokidClient::make_gyuanxd_request(std::string_view method,
+void GyuanxdClient::make_gyuanxd_request(std::string_view method,
                                      const nlohmann::json& params,
                                      http_callback_t&& cb) const {
 
@@ -98,7 +98,7 @@ void LokidClient::make_gyuanxd_request(std::string_view method,
                               std::move(cb));
 }
 
-void LokidClient::make_custom_gyuanxd_request(const std::string& daemon_ip,
+void GyuanxdClient::make_custom_gyuanxd_request(const std::string& daemon_ip,
                                             const uint16_t daemon_port,
                                             std::string_view method,
                                             const nlohmann::json& params,
@@ -119,13 +119,13 @@ void LokidClient::make_custom_gyuanxd_request(const std::string& daemon_ip,
     req->target(target);
     req->prepare_payload();
 
-    LOKI_LOG(trace, "Making gyuanxd request, method: {}", std::string(method));
+    GYUANX_LOG(trace, "Making gyuanxd request, method: {}", std::string(method));
 
     make_http_request(ioc_, daemon_ip, daemon_port, req, std::move(cb));
 }
 
 static bool validateHexKey(const std::string& key,
-                           const size_t key_length = loki::KEY_LENGTH) {
+                           const size_t key_length = gyuanx::KEY_LENGTH) {
     return key.size() == 2 * key_length &&
            std::all_of(key.begin(), key.end(), [](char c) {
                return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
@@ -133,31 +133,31 @@ static bool validateHexKey(const std::string& key,
 }
 
 std::tuple<private_key_t, private_key_ed25519_t, private_key_t>
-LokidClient::wait_for_privkey() {
+GyuanxdClient::wait_for_privkey() {
     // fetch SN private key from gyuanxd; do this synchronously because we can't
     // finish startup until we have it.
-    loki::private_key_t private_key;
-    loki::private_key_ed25519_t private_key_ed;
-    loki::private_key_t private_key_x;
-    LOKI_LOG(info, "Retrieving SN key from gyuanxd");
+    gyuanx::private_key_t private_key;
+    gyuanx::private_key_ed25519_t private_key_ed;
+    gyuanx::private_key_t private_key_x;
+    GYUANX_LOG(info, "Retrieving SN key from gyuanxd");
     boost::asio::steady_timer delay{ioc_};
-    std::function<void(loki::sn_response_t && res)> key_fetch;
-    key_fetch = [&](loki::sn_response_t res) {
+    std::function<void(gyuanx::sn_response_t && res)> key_fetch;
+    key_fetch = [&](gyuanx::sn_response_t res) {
         try {
-            if (res.error_code != loki::SNodeError::NO_ERROR)
-                throw std::runtime_error(loki::error_string(res.error_code));
+            if (res.error_code != gyuanx::SNodeError::NO_ERROR)
+                throw std::runtime_error(gyuanx::error_string(res.error_code));
             else if (!res.body)
                 throw std::runtime_error("empty body");
             else {
                 auto r = nlohmann::json::parse(*res.body);
                 const auto& legacy_privkey = r.at("result")
-                                                 .at("gnode_privkey")
+                                                 .at("service_node_privkey")
                                                  .get_ref<const std::string&>();
                 const auto& privkey_ed = r.at("result")
-                                             .at("gnode_ed25519_privkey")
+                                             .at("service_node_ed25519_privkey")
                                              .get_ref<const std::string&>();
                 const auto& privkey_x = r.at("result")
-                                            .at("gnode_x25519_privkey")
+                                            .at("service_node_x25519_privkey")
                                             .get_ref<const std::string&>();
                 if (!validateHexKey(legacy_privkey) ||
                     !validateHexKey(privkey_ed,
@@ -165,17 +165,17 @@ LokidClient::wait_for_privkey() {
                     !validateHexKey(privkey_x))
                     throw std::runtime_error("returned value is not hex");
                 else {
-                    private_key = loki::gyuanxdKeyFromHex(legacy_privkey);
+                    private_key = gyuanx::gyuanxdKeyFromHex(legacy_privkey);
                     // TODO: check that one is derived from the other as a
                     // sanity check?
                     private_key_ed =
                         private_key_ed25519_t::from_hex(privkey_ed);
-                    private_key_x = loki::gyuanxdKeyFromHex(privkey_x);
+                    private_key_x = gyuanx::gyuanxdKeyFromHex(privkey_x);
                     // run out of work, which will end the event loop
                 }
             }
         } catch (const std::exception& e) {
-            LOKI_LOG(critical,
+            GYUANX_LOG(critical,
                      "Error retrieving SN privkey from gyuanxd @ {}:{}: {}.  Is "
                      "gyuanxd running?  Retrying in 5s",
                      gyuanxd_rpc_ip_, gyuanxd_rpc_port_, e.what());
@@ -183,11 +183,11 @@ LokidClient::wait_for_privkey() {
             delay.expires_after(std::chrono::seconds{5});
             delay.async_wait([this,
                               &key_fetch](const boost::system::error_code&) {
-                make_gyuanxd_request("get_gnode_privkey", {}, key_fetch);
+                make_gyuanxd_request("get_service_node_privkey", {}, key_fetch);
             });
         }
     };
-    make_gyuanxd_request("get_gnode_privkey", {}, key_fetch);
+    make_gyuanxd_request("get_service_node_privkey", {}, key_fetch);
     ioc_.run(); // runs until we get success above
     ioc_.restart();
 
@@ -210,7 +210,7 @@ static void accept_connection(boost::asio::io_context& ioc,
     constexpr std::chrono::milliseconds ACCEPT_DELAY = 50ms;
 
     acceptor.async_accept([&](const error_code& ec, tcp::socket socket) {
-        LOKI_LOG(trace, "connection accepted");
+        GYUANX_LOG(trace, "connection accepted");
         if (!ec) {
 
             std::make_shared<connection_t>(ioc, ssl_ctx, std::move(socket), sn,
@@ -224,11 +224,11 @@ static void accept_connection(boost::asio::io_context& ioc,
             // TODO: remove this once we confirmed that there is
             // no more socket leaking
             if (ec == boost::system::errc::too_many_files_open) {
-                LOKI_LOG(critical, "Too many open files, aborting");
+                GYUANX_LOG(critical, "Too many open files, aborting");
                 abort();
             }
 
-            LOKI_LOG(
+            GYUANX_LOG(
                 error,
                 "Could not accept a new connection {}: {}. Will only start "
                 "accepting new connections after a short delay.",
@@ -256,7 +256,7 @@ void run(boost::asio::io_context& ioc, const std::string& ip, uint16_t port,
          const boost::filesystem::path& base_path, ServiceNode& sn,
          RequestHandler& rh, RateLimiter& rate_limiter, Security& security) {
 
-    LOKI_LOG(trace, "http server run");
+    GYUANX_LOG(trace, "http server run");
 
     const auto address =
         boost::asio::ip::make_address(ip); /// throws if incorrect
@@ -281,7 +281,7 @@ connection_t::connection_t(boost::asio::io_context& ioc, ssl::context& ssl_ctx,
                            RequestHandler& rh, RateLimiter& rate_limiter,
                            const Security& security)
     : ioc_(ioc), ssl_ctx_(ssl_ctx), socket_(std::move(socket)),
-      stream_(socket_, ssl_ctx_), gnode_(sn), request_handler_(rh),
+      stream_(socket_, ssl_ctx_), service_node_(sn), request_handler_(rh),
       rate_limiter_(rate_limiter), repeat_timer_(ioc),
       deadline_(ioc, SESSION_TIME_LIMIT), notification_ctx_{std::nullopt},
       security_(security) {
@@ -291,7 +291,7 @@ connection_t::connection_t(boost::asio::io_context& ioc, ssl::context& ssl_ctx,
 
     get_net_stats().connections_in++;
 
-    LOKI_LOG(trace, "connection_t [{}]", conn_idx);
+    GYUANX_LOG(trace, "connection_t [{}]", conn_idx);
 
     request_.body_limit(1024 * 1024 * 10); // 10 mb
 
@@ -302,14 +302,14 @@ connection_t::~connection_t() {
 
     // Safety net
     if (stream_.lowest_layer().is_open()) {
-        LOKI_LOG(debug, "Client socket should be closed by this point, but "
+        GYUANX_LOG(debug, "Client socket should be closed by this point, but "
                         "wasn't. Closing now.");
         stream_.lowest_layer().close();
     }
 
     get_net_stats().connections_in--;
 
-    LOKI_LOG(trace, "~connection_t [{}]", conn_idx);
+    GYUANX_LOG(trace, "~connection_t [{}]", conn_idx);
 }
 
 void connection_t::start() {
@@ -328,10 +328,10 @@ void connection_t::do_handshake() {
 void connection_t::on_handshake(boost::system::error_code ec) {
 
     const auto sockfd = stream_.lowest_layer().native_handle();
-    LOKI_LOG(trace, "Open https socket: {}", sockfd);
+    GYUANX_LOG(trace, "Open https socket: {}", sockfd);
     get_net_stats().record_socket_open(sockfd);
     if (ec) {
-        LOKI_LOG(debug, "ssl handshake failed: ec: {} ({})", ec.value(),
+        GYUANX_LOG(debug, "ssl handshake failed: ec: {} ({})", ec.value(),
                  ec.message());
         this->clean_up();
         deadline_.cancel();
@@ -346,13 +346,13 @@ void connection_t::clean_up() { this->do_close(); }
 void connection_t::notify(const message_t* msg) {
 
     if (!notification_ctx_) {
-        LOKI_LOG(error,
+        GYUANX_LOG(error,
                  "Trying to notify a connection without notification context");
         return;
     }
 
     if (msg) {
-        LOKI_LOG(trace, "Processing message notification: {}", msg->data);
+        GYUANX_LOG(trace, "Processing message notification: {}", msg->data);
         // save messages, so we can access them once the timer event happens
         notification_ctx_->message = *msg;
     }
@@ -365,10 +365,10 @@ void connection_t::read_request() {
 
     auto on_data = [self = shared_from_this()](error_code ec,
                                                size_t bytes_transferred) {
-        LOKI_LOG(trace, "on data: {} bytes", bytes_transferred);
+        GYUANX_LOG(trace, "on data: {} bytes", bytes_transferred);
 
         if (ec) {
-            LOKI_LOG(
+            GYUANX_LOG(
                 error,
                 "Failed to read from a socket [{}: {}], connection idx: {}",
                 ec.value(), ec.message(), self->conn_idx);
@@ -381,7 +381,7 @@ void connection_t::read_request() {
         try {
             self->process_request();
         } catch (const std::exception& e) {
-            LOKI_LOG(critical, "Exception caught processing a request: {}",
+            GYUANX_LOG(critical, "Exception caught processing a request: {}",
                      e.what());
             self->body_stream_ << e.what();
         }
@@ -403,19 +403,19 @@ static bool verify_signature(const std::string& payload,
 }
 
 bool connection_t::validate_snode_request() {
-    if (!parse_header(LOKI_SENDER_SNODE_PUBKEY_HEADER,
-                      LOKI_SNODE_SIGNATURE_HEADER)) {
-        LOKI_LOG(debug, "Missing signature headers for a Service Node request");
+    if (!parse_header(GYUANX_SENDER_SNODE_PUBKEY_HEADER,
+                      GYUANX_SNODE_SIGNATURE_HEADER)) {
+        GYUANX_LOG(debug, "Missing signature headers for a Service Node request");
         return false;
     }
-    const auto& signature = header_[LOKI_SNODE_SIGNATURE_HEADER];
-    const auto& public_key_b32z = header_[LOKI_SENDER_SNODE_PUBKEY_HEADER];
+    const auto& signature = header_[GYUANX_SNODE_SIGNATURE_HEADER];
+    const auto& public_key_b32z = header_[GYUANX_SENDER_SNODE_PUBKEY_HEADER];
 
     /// Known service node
     const std::string snode_address = public_key_b32z + ".snode";
-    if (!gnode_.is_snode_address_known(snode_address)) {
+    if (!service_node_.is_snode_address_known(snode_address)) {
         body_stream_ << "Unknown service node\n";
-        LOKI_LOG(debug, "Discarding signature from unknown service node: {}",
+        GYUANX_LOG(debug, "Discarding signature from unknown service node: {}",
                  public_key_b32z);
         response_.result(http::status::unauthorized);
         return false;
@@ -423,7 +423,7 @@ bool connection_t::validate_snode_request() {
 
     if (!verify_signature(request_.get().body(), signature, public_key_b32z)) {
         constexpr auto msg = "Could not verify batch signature";
-        LOKI_LOG(debug, "{}", msg);
+        GYUANX_LOG(debug, "{}", msg);
         body_stream_ << msg;
         response_.result(http::status::unauthorized);
         return false;
@@ -440,7 +440,7 @@ void connection_t::process_storage_test_req(uint64_t height,
                                             const std::string& tester_pk,
                                             const std::string& msg_hash) {
 
-    LOKI_LOG(trace, "Performing storage test, attempt: {}", repetition_count_);
+    GYUANX_LOG(trace, "Performing storage test, attempt: {}", repetition_count_);
 
     std::string answer;
 
@@ -449,12 +449,12 @@ void connection_t::process_storage_test_req(uint64_t height,
     /// that! This is done implicitly to some degree using
     /// `block_hashes_cache_`, which holds a limited number of recent blocks
     /// only and fails if an earlier block is requested
-    const MessageTestStatus status = gnode_.process_storage_test_req(
+    const MessageTestStatus status = service_node_.process_storage_test_req(
         height, tester_pk, msg_hash, answer);
     const auto elapsed_time =
         std::chrono::steady_clock::now() - start_timestamp_;
     if (status == MessageTestStatus::SUCCESS) {
-        LOKI_LOG(
+        GYUANX_LOG(
             debug, "Storage test success! Attempts: {}. Took {} ms",
             repetition_count_,
             std::chrono::duration_cast<std::chrono::milliseconds>(elapsed_time)
@@ -478,7 +478,7 @@ void connection_t::process_storage_test_req(uint64_t height,
                                   tester_pk](const error_code& ec) {
             if (ec) {
                 if (ec != boost::asio::error::operation_aborted) {
-                    LOKI_LOG(error,
+                    GYUANX_LOG(error,
                              "Repeat timer failed for storage test [{}: {}]",
                              ec.value(), ec.message());
                 }
@@ -494,7 +494,7 @@ void connection_t::process_storage_test_req(uint64_t height,
         response_.result(http::status::ok);
     } else {
         // Promote this to `error` once we enforce storage testing
-        LOKI_LOG(debug, "Failed storage test, tried {} times.",
+        GYUANX_LOG(debug, "Failed storage test, tried {} times.",
                  repetition_count_);
         nlohmann::json json_res;
         json_res["status"] = "other";
@@ -510,7 +510,7 @@ void connection_t::process_blockchain_test_req(uint64_t,
     // Note: `height` can be 0, which is the default value for old SS, allowed
     // pre HF13
 
-    LOKI_LOG(debug, "Performing blockchain test");
+    GYUANX_LOG(debug, "Performing blockchain test");
 
     auto callback = [this](blockchain_test_answer_t answer) {
         this->response_.result(http::status::ok);
@@ -524,19 +524,19 @@ void connection_t::process_blockchain_test_req(uint64_t,
 
     /// TODO: this should first check if tester/testee are correct! (use
     /// `height`)
-    gnode_.perform_blockchain_test(params, std::move(callback));
+    service_node_.perform_blockchain_test(params, std::move(callback));
 }
 
 static void print_headers(const request_t& req) {
-    LOKI_LOG(info, "HEADERS:");
+    GYUANX_LOG(info, "HEADERS:");
     for (const auto& field : req) {
-        LOKI_LOG(info, "    [{}]: {}", field.name_string(), field.value());
+        GYUANX_LOG(info, "    [{}]: {}", field.name_string(), field.value());
     }
 }
 
 void connection_t::process_onion_req_v2() {
 
-    LOKI_LOG(debug, "Processing an onion request from client (v2)");
+    GYUANX_LOG(debug, "Processing an onion request from client (v2)");
 
     const request_t& req = this->request_.get();
 
@@ -544,12 +544,12 @@ void connection_t::process_onion_req_v2() {
     delay_response_ = true;
 
     auto on_response = [wself = std::weak_ptr<connection_t>{
-                            shared_from_this()}](loki::Response res) {
-        LOKI_LOG(debug, "Got an onion response as guard node");
+                            shared_from_this()}](gyuanx::Response res) {
+        GYUANX_LOG(debug, "Got an onion response as guard node");
 
         auto self = wself.lock();
         if (!self) {
-            LOKI_LOG(debug,
+            GYUANX_LOG(debug,
                      "Connection is no longer valid, dropping onion response");
             return;
         }
@@ -569,14 +569,14 @@ void connection_t::process_onion_req_v2() {
         const auto& ephem_key =
             json_req.at("ephemeral_key").get_ref<const std::string&>();
 
-        gnode_.record_onion_request();
+        service_node_.record_onion_request();
         request_handler_.process_onion_req(res.ciphertext, ephem_key,
                                            on_response, true);
 
     } catch (const std::exception& e) {
         auto msg = fmt::format("Error parsing outer JSON in onion request: {}",
                                e.what());
-        LOKI_LOG(error, "{}", msg);
+        GYUANX_LOG(error, "{}", msg);
         response_.result(http::status::bad_request);
         this->body_stream_ << std::move(msg);
         this->write_response();
@@ -585,7 +585,7 @@ void connection_t::process_onion_req_v2() {
 
 void connection_t::process_onion_req_v1() {
 
-    LOKI_LOG(debug, "Processing an onion request from client (v1)");
+    GYUANX_LOG(debug, "Processing an onion request from client (v1)");
 
     const request_t& req = this->request_.get();
 
@@ -595,12 +595,12 @@ void connection_t::process_onion_req_v1() {
     delay_response_ = true;
 
     auto on_response = [wself = std::weak_ptr<connection_t>{
-                            shared_from_this()}](loki::Response res) {
-        LOKI_LOG(debug, "Got an onion response as guard node");
+                            shared_from_this()}](gyuanx::Response res) {
+        GYUANX_LOG(debug, "Got an onion response as guard node");
 
         auto self = wself.lock();
         if (!self) {
-            LOKI_LOG(debug,
+            GYUANX_LOG(debug,
                      "Connection is no longer valid, dropping onion response");
             return;
         }
@@ -621,13 +621,13 @@ void connection_t::process_onion_req_v1() {
         const auto& ephem_key =
             json_req.at("ephemeral_key").get_ref<const std::string&>();
 
-        gnode_.record_onion_request();
+        service_node_.record_onion_request();
         request_handler_.process_onion_req(ciphertext, ephem_key, on_response);
 
     } catch (const std::exception& e) {
         auto msg = fmt::format("Error parsing outer JSON in onion request: {}",
                                e.what());
-        LOKI_LOG(error, "{}", msg);
+        GYUANX_LOG(error, "{}", msg);
         response_.result(http::status::bad_request);
         this->body_stream_ << std::move(msg);
         this->write_response();
@@ -640,9 +640,9 @@ void connection_t::process_proxy_req() {
 
     const int req_idx = req_counter;
 
-    LOKI_LOG(debug, "[{}] Processing proxy request: we are first hop", req_idx);
+    GYUANX_LOG(debug, "[{}] Processing proxy request: we are first hop", req_idx);
 
-    gnode_.record_proxy_request();
+    service_node_.record_proxy_request();
 
     const request_t& req = this->request_.get();
 
@@ -650,41 +650,41 @@ void connection_t::process_proxy_req() {
     // print_headers(req);
 #endif
 
-    if (!parse_header(LOKI_SENDER_KEY_HEADER, LOKI_TARGET_SNODE_KEY)) {
-        LOKI_LOG(debug, "Missing headers for a proxy request");
+    if (!parse_header(GYUANX_SENDER_KEY_HEADER, GYUANX_TARGET_SNODE_KEY)) {
+        GYUANX_LOG(debug, "Missing headers for a proxy request");
         return;
     }
 
     delay_response_ = true;
 
-    const auto& sender_key = header_[LOKI_SENDER_KEY_HEADER];
-    const auto& target_snode_key = header_[LOKI_TARGET_SNODE_KEY];
+    const auto& sender_key = header_[GYUANX_SENDER_KEY_HEADER];
+    const auto& target_snode_key = header_[GYUANX_TARGET_SNODE_KEY];
 
-    LOKI_LOG(debug, "[{}] Destination: {}", req_idx, target_snode_key);
+    GYUANX_LOG(debug, "[{}] Destination: {}", req_idx, target_snode_key);
 
-    auto sn = gnode_.find_node_by_ed25519_pk(target_snode_key);
+    auto sn = service_node_.find_node_by_ed25519_pk(target_snode_key);
 
     // TODO: make an https response out of what we got back
     auto on_proxy_response =
         [wself = std::weak_ptr<connection_t>{shared_from_this()},
          req_idx](bool success, std::vector<std::string> data) {
-            LOKI_LOG(debug, "on proxy response: {}",
+            GYUANX_LOG(debug, "on proxy response: {}",
                      success ? "success" : "failure");
 
             auto self = wself.lock();
             if (!self) {
-                LOKI_LOG(
+                GYUANX_LOG(
                     debug,
                     "Connection is no longer valid, dropping proxy response");
                 return;
             }
 
             if (!success) {
-                LOKI_LOG(debug, "Proxy response FAILED (timeout), idx: {}",
+                GYUANX_LOG(debug, "Proxy response FAILED (timeout), idx: {}",
                          req_idx);
                 self->response_.result(http::status::gateway_timeout);
             } else if (data.size() == 2) {
-                LOKI_LOG(debug, "Proxy respose with status, idx: {}", req_idx);
+                GYUANX_LOG(debug, "Proxy respose with status, idx: {}", req_idx);
 
                 try {
                     int status = std::stoi(data[0]);
@@ -695,12 +695,12 @@ void connection_t::process_proxy_req() {
                 }
 
             } else if (data.size() != 1) {
-                LOKI_LOG(debug,
+                GYUANX_LOG(debug,
                          "Proxy response FAILED (wrong data size), idx: {}",
                          req_idx);
                 self->response_.result(http::status::internal_server_error);
             } else {
-                LOKI_LOG(debug, "PROXY RESPONSE OK, idx: {}", req_idx);
+                GYUANX_LOG(debug, "PROXY RESPONSE OK, idx: {}", req_idx);
                 self->body_stream_ << data[0];
                 self->response_.result(http::status::ok);
             }
@@ -711,55 +711,55 @@ void connection_t::process_proxy_req() {
         };
 
     if (!sn) {
-        LOKI_LOG(debug, "Could not find target snode for proxy: {}",
+        GYUANX_LOG(debug, "Could not find target snode for proxy: {}",
                  target_snode_key);
         on_proxy_response(false, {});
         return;
     }
 
-    LOKI_LOG(debug, "Target Snode: {}", target_snode_key);
+    GYUANX_LOG(debug, "Target Snode: {}", target_snode_key);
 
-    // Send this request to SN over either HTTP or LOKIMQ
+    // Send this request to SN over either HTTP or GYUANXMQ
     auto sn_req =
-        ss_client::Request{req.body(), {{LOKI_SENDER_KEY_HEADER, sender_key}}};
+        ss_client::Request{req.body(), {{GYUANX_SENDER_KEY_HEADER, sender_key}}};
 
-    LOKI_LOG(debug, "About to send a proxy exit requst, idx: {}", req_counter);
+    GYUANX_LOG(debug, "About to send a proxy exit requst, idx: {}", req_counter);
     req_counter += 1;
 
-    gnode_.send_to_sn(*sn, ss_client::ReqMethod::PROXY_EXIT,
+    service_node_.send_to_sn(*sn, ss_client::ReqMethod::PROXY_EXIT,
                              std::move(sn_req), on_proxy_response);
 }
 
 void connection_t::process_file_proxy_req() {
 
-    LOKI_LOG(debug, "Processing a file proxy request: we are first hop");
+    GYUANX_LOG(debug, "Processing a file proxy request: we are first hop");
 
     const request_t& original_req = this->request_.get();
 
     delay_response_ = true;
 
-    if (!parse_header(LOKI_FILE_SERVER_TARGET_HEADER,
-                      LOKI_FILE_SERVER_VERB_HEADER,
-                      LOKI_FILE_SERVER_HEADERS_HEADER)) {
-        LOKI_LOG(error, "Missing headers for a file proxy request");
+    if (!parse_header(GYUANX_FILE_SERVER_TARGET_HEADER,
+                      GYUANX_FILE_SERVER_VERB_HEADER,
+                      GYUANX_FILE_SERVER_HEADERS_HEADER)) {
+        GYUANX_LOG(error, "Missing headers for a file proxy request");
         // TODO: The connection should be closed by the timer if we return
         // early, but need to double-check that! (And close it early if
         // possible)
         return;
     }
 
-    const auto& target = header_[LOKI_FILE_SERVER_TARGET_HEADER];
-    const auto& verb_str = header_[LOKI_FILE_SERVER_VERB_HEADER];
-    const auto& headers_str = header_[LOKI_FILE_SERVER_HEADERS_HEADER];
+    const auto& target = header_[GYUANX_FILE_SERVER_TARGET_HEADER];
+    const auto& verb_str = header_[GYUANX_FILE_SERVER_VERB_HEADER];
+    const auto& headers_str = header_[GYUANX_FILE_SERVER_HEADERS_HEADER];
 
-    LOKI_LOG(trace, "Target: {}", target);
-    LOKI_LOG(trace, "Verb: {}", verb_str);
-    LOKI_LOG(trace, "Headers json: {}", headers_str);
+    GYUANX_LOG(trace, "Target: {}", target);
+    GYUANX_LOG(trace, "Verb: {}", verb_str);
+    GYUANX_LOG(trace, "Headers json: {}", headers_str);
 
     const json headers_json = json::parse(headers_str, nullptr, false);
 
     if (headers_json.is_discarded()) {
-        LOKI_LOG(debug, "Bad file proxy request: invalid header json");
+        GYUANX_LOG(debug, "Bad file proxy request: invalid header json");
         response_.result(http::status::bad_request);
         return;
     }
@@ -783,14 +783,14 @@ void connection_t::process_file_proxy_req() {
     {
         const auto it = original_req.find(http::field::content_type);
         if (it != original_req.end()) {
-            LOKI_LOG(trace, "Content-Type: {}", it->value().to_string());
+            GYUANX_LOG(trace, "Content-Type: {}", it->value().to_string());
             req->set(http::field::content_type, it->value().to_string());
         }
     }
 
     req->body() = std::move(original_req.body());
     req->target(target);
-    req->set(http::field::host, "file.lokinet.org");
+    req->set(http::field::host, "file.gyuanxnet.org");
 
     req->prepare_payload();
 
@@ -800,26 +800,26 @@ void connection_t::process_file_proxy_req() {
 
     auto cb = [wself = std::weak_ptr<connection_t>{shared_from_this()}](
                   sn_response_t res) {
-        LOKI_LOG(trace, "Successful file proxy request!");
+        GYUANX_LOG(trace, "Successful file proxy request!");
 
         auto self = wself.lock();
         if (!self) {
-            LOKI_LOG(debug,
+            GYUANX_LOG(debug,
                      "Connection is no longer valid, dropping proxy response");
             return;
         }
 
         if (res.raw_response) {
             self->response_ = *res.raw_response;
-            LOKI_LOG(trace, "Response: {}", self->response_);
+            GYUANX_LOG(trace, "Response: {}", self->response_);
         } else {
-            LOKI_LOG(debug, "No response from file server!");
+            GYUANX_LOG(debug, "No response from file server!");
         }
 
         self->write_response();
     };
 
-    make_https_request(ioc_, "https://file.lokinet.org", req, cb);
+    make_https_request(ioc_, "https://file.gyuanxnet.org", req, cb);
 }
 
 void connection_t::process_swarm_req(std::string_view target) {
@@ -831,25 +831,25 @@ void connection_t::process_swarm_req(std::string_view target) {
         return;
     }
 
-    response_.set(LOKI_SNODE_SIGNATURE_HEADER, security_.get_cert_signature());
+    response_.set(GYUANX_SNODE_SIGNATURE_HEADER, security_.get_cert_signature());
 
     if (target == "/swarms/push_batch/v1") {
 
         response_.result(http::status::ok);
-        gnode_.process_push_batch(req.body());
+        service_node_.process_push_batch(req.body());
 
     } else if (target == "/swarms/storage_test/v1") {
 
         /// Set to "bad request" by default
         response_.result(http::status::bad_request);
-        LOKI_LOG(trace, "Got storage test request");
+        GYUANX_LOG(trace, "Got storage test request");
 
         using nlohmann::json;
 
         const json body = json::parse(req.body(), nullptr, false);
 
         if (body == nlohmann::detail::value_t::discarded) {
-            LOKI_LOG(debug, "Bad snode test request: invalid json");
+            GYUANX_LOG(debug, "Bad snode test request: invalid json");
             body_stream_ << "invalid json\n";
             response_.result(http::status::bad_request);
             return;
@@ -865,26 +865,26 @@ void connection_t::process_swarm_req(std::string_view target) {
             this->body_stream_
                 << "Bad snode test request: missing fields in json";
             response_.result(http::status::bad_request);
-            LOKI_LOG(debug, "Bad snode test request: missing fields in json");
+            GYUANX_LOG(debug, "Bad snode test request: missing fields in json");
             return;
         }
 
-        const auto it = header_.find(LOKI_SENDER_SNODE_PUBKEY_HEADER);
+        const auto it = header_.find(GYUANX_SENDER_SNODE_PUBKEY_HEADER);
         if (it != header_.end()) {
             const std::string& tester_pk = it->second;
             this->process_storage_test_req(blk_height, tester_pk, msg_hash);
         } else {
-            LOKI_LOG(debug, "Ignoring test request, no pubkey present");
+            GYUANX_LOG(debug, "Ignoring test request, no pubkey present");
         }
     } else if (target == "/swarms/blockchain_test/v1") {
-        LOKI_LOG(debug, "Got blockchain test request");
+        GYUANX_LOG(debug, "Got blockchain test request");
 
         using nlohmann::json;
 
         const json body = json::parse(req.body(), nullptr, false);
 
         if (body.is_discarded()) {
-            LOKI_LOG(debug, "Bad snode test request: invalid json");
+            GYUANX_LOG(debug, "Bad snode test request: invalid json");
             response_.result(http::status::bad_request);
             return;
         }
@@ -901,27 +901,27 @@ void connection_t::process_swarm_req(std::string_view target) {
             if (body.find("height") != body.end()) {
                 height = body.at("height").get<uint64_t>();
             } else {
-                LOKI_LOG(debug, "No tester height, defaulting to {}", height);
+                GYUANX_LOG(debug, "No tester height, defaulting to {}", height);
             }
         } catch (...) {
             response_.result(http::status::bad_request);
-            LOKI_LOG(debug, "Bad snode test request: missing fields in json");
+            GYUANX_LOG(debug, "Bad snode test request: missing fields in json");
             return;
         }
 
         /// TODO: only check pubkey field once (in validate snode req)
-        const auto it = header_.find(LOKI_SENDER_SNODE_PUBKEY_HEADER);
+        const auto it = header_.find(GYUANX_SENDER_SNODE_PUBKEY_HEADER);
         if (it != header_.end()) {
             const std::string& tester_pk = it->second;
             delay_response_ = true;
             this->process_blockchain_test_req(height, tester_pk, params);
         } else {
-            LOKI_LOG(debug, "Ignoring test request, no pubkey present");
+            GYUANX_LOG(debug, "Ignoring test request, no pubkey present");
         }
 
     } else if (target == "/swarms/ping_test/v1") {
-        LOKI_LOG(trace, "Received ping_test");
-        gnode_.update_last_ping(ReachType::HTTP);
+        GYUANX_LOG(trace, "Received ping_test");
+        service_node_.update_last_ping(ReachType::HTTP);
         response_.result(http::status::ok);
     }
 }
@@ -940,7 +940,7 @@ void connection_t::set_response(const Response& res) {
         content_type = "application/json";
         break;
     default:
-        LOKI_LOG(critical, "Unrecognized content type");
+        GYUANX_LOG(critical, "Unrecognized content type");
     }
 
     response_.set(http::field::content_type, content_type);
@@ -954,7 +954,7 @@ void connection_t::process_request() {
 
     /// This method is responsible for filling out response_
 
-    LOKI_LOG(debug, "connection_t::process_request");
+    GYUANX_LOG(debug, "connection_t::process_request");
     response_.version(req.version());
     response_.keep_alive(false);
 
@@ -966,12 +966,12 @@ void connection_t::process_request() {
     const std::string_view target =
         std::string_view(target0.data(), target0.size());
 
-    LOKI_LOG(debug, "target: {}", target);
+    GYUANX_LOG(debug, "target: {}", target);
 
     const bool is_swarm_req = (target.find("/swarms/") == 0);
 
     if (is_swarm_req) {
-        LOKI_LOG(debug, "Processing a swarm request: {}", target);
+        GYUANX_LOG(debug, "Processing a swarm request: {}", target);
     }
 
     switch (req.method()) {
@@ -983,11 +983,11 @@ void connection_t::process_request() {
             this->process_swarm_req(target);
             break;
         }
-        if (!gnode_.snode_ready(&reason)) {
-            LOKI_LOG(debug,
+        if (!service_node_.snode_ready(&reason)) {
+            GYUANX_LOG(debug,
                      "Ignoring post request; storage server not ready: {}",
                      reason);
-            LOKI_LOG(debug, "Would send 503 error (2)");
+            GYUANX_LOG(debug, "Would send 503 error (2)");
             response_.result(http::status::service_unavailable);
             body_stream_ << fmt::format("Service node is not ready: {}\n",
                                         reason);
@@ -995,7 +995,7 @@ void connection_t::process_request() {
         }
         if (target == "/storage_rpc/v1") {
             /// Store/load from clients
-            LOKI_LOG(trace, "POST /storage_rpc/v1");
+            GYUANX_LOG(trace, "POST /storage_rpc/v1");
 
             try {
                 process_client_req_rate_limited();
@@ -1004,7 +1004,7 @@ void connection_t::process_request() {
                     "Exception caught while processing client request: {}",
                     e.what());
                 response_.result(http::status::internal_server_error);
-                LOKI_LOG(critical,
+                GYUANX_LOG(critical,
                          "Exception caught while processing client request: {}",
                          e.what());
             }
@@ -1027,7 +1027,7 @@ void connection_t::process_request() {
             this->set_response(res);
 
         } else if (target == "/quit") {
-            LOKI_LOG(info, "POST /quit");
+            GYUANX_LOG(info, "POST /quit");
             // a bit of a hack: sending response manually
             delay_response_ = true;
             response_.result(http::status::ok);
@@ -1035,14 +1035,14 @@ void connection_t::process_request() {
             ioc_.stop();
         } else if (target == "/sleep") {
             ioc_.post([]() {
-                LOKI_LOG(warn, "Sleeping for some time...");
+                GYUANX_LOG(warn, "Sleeping for some time...");
                 std::this_thread::sleep_for(std::chrono::seconds(30));
             });
             response_.result(http::status::ok);
         }
 #endif
         else {
-            LOKI_LOG(debug, "unknown target for POST: {}", target);
+            GYUANX_LOG(debug, "unknown target for POST: {}", target);
             this->body_stream_
                 << fmt::format("unknown target for POST: {}", target);
             response_.result(http::status::not_found);
@@ -1056,12 +1056,12 @@ void connection_t::process_request() {
         } else {
             this->body_stream_
                 << fmt::format("unknown target for GET: {}", target);
-            LOKI_LOG(debug, "unknown target for GET: {}", target);
+            GYUANX_LOG(debug, "unknown target for GET: {}", target);
             response_.result(http::status::not_found);
         }
         break;
     default:
-        LOKI_LOG(debug, "bad request");
+        GYUANX_LOG(debug, "bad request");
         response_.result(http::status::bad_request);
         break;
     }
@@ -1070,14 +1070,14 @@ void connection_t::process_request() {
 // Asynchronously transmit the response message.
 void connection_t::write_response() {
 
-    LOKI_LOG(trace, "write response, {} bytes", response_.body().size());
+    GYUANX_LOG(trace, "write response, {} bytes", response_.body().size());
 
     const std::string body_stream = body_stream_.str();
 
     if (!body_stream.empty()) {
 
         if (!response_.body().empty()) {
-            LOKI_LOG(debug, "Overwritting non-empty body in response!");
+            GYUANX_LOG(debug, "Overwritting non-empty body in response!");
         }
 
         response_.body() = body_stream_.str();
@@ -1095,7 +1095,7 @@ void connection_t::write_response() {
     http::async_write(
         stream_, response_, [self = shared_from_this()](error_code ec, size_t) {
             if (ec && ec != boost::asio::error::operation_aborted) {
-                LOKI_LOG(error, "Failed to write to a socket: {}",
+                GYUANX_LOG(error, "Failed to write to a socket: {}",
                          ec.message());
             }
 
@@ -1127,7 +1127,7 @@ constexpr auto LONG_POLL_TIMEOUT = std::chrono::milliseconds(20000);
 
 void connection_t::process_client_req_rate_limited() {
 
-    LOKI_LOG(trace, "process_client_req_rate_limited");
+    GYUANX_LOG(trace, "process_client_req_rate_limited");
 
     const request_t& req = this->request_.get();
     std::string plain_text = req.body();
@@ -1136,7 +1136,7 @@ void connection_t::process_client_req_rate_limited() {
     if (rate_limiter_.should_rate_limit_client(client_ip)) {
         this->body_stream_ << "too many requests\n";
         response_.result(http::status::too_many_requests);
-        LOKI_LOG(debug, "Rate limiting client request.");
+        GYUANX_LOG(debug, "Rate limiting client request.");
         return;
     }
 
@@ -1144,13 +1144,13 @@ void connection_t::process_client_req_rate_limited() {
     // in request_ and the actual header_ field, but it is useful for
     // "proxy" client requests as we can have both true html headers
     // and the headers that came encrypted in body
-    if (req.find(LOKI_LONG_POLL_HEADER) != req.end()) {
-        header_[LOKI_LONG_POLL_HEADER] =
-            req.at(LOKI_LONG_POLL_HEADER).to_string();
+    if (req.find(GYUANX_LONG_POLL_HEADER) != req.end()) {
+        header_[GYUANX_LONG_POLL_HEADER] =
+            req.at(GYUANX_LONG_POLL_HEADER).to_string();
     }
 
     const bool lp_requested =
-        header_.find(LOKI_LONG_POLL_HEADER) != header_.end();
+        header_.find(GYUANX_LONG_POLL_HEADER) != header_.end();
 
     // Annoyingly, we might still have old clients that expect long-polling
     // to work, spamming us with "retrieve" requests. The workaround for now
@@ -1161,7 +1161,7 @@ void connection_t::process_client_req_rate_limited() {
 
     // TODO: remove this when we remove long-polling from (most) clients
     if (lp_requested) {
-        LOKI_LOG(debug, "Received a long-polling request");
+        GYUANX_LOG(debug, "Received a long-polling request");
 
         auto delay_timer = std::make_shared<boost::asio::steady_timer>(ioc_);
 
@@ -1171,16 +1171,16 @@ void connection_t::process_client_req_rate_limited() {
                                     const error_code& ec) {
             self->request_handler_.process_client_req(
                 plaintext, [wself = std::weak_ptr<connection_t>{self}](
-                               loki::Response res) {
+                               gyuanx::Response res) {
                     auto self = wself.lock();
                     if (!self) {
-                        LOKI_LOG(
+                        GYUANX_LOG(
                             debug,
                             "Connection is no longer valid, dropping response");
                         return;
                     }
 
-                    LOKI_LOG(debug, "Respond to a long-polling client");
+                    GYUANX_LOG(debug, "Respond to a long-polling client");
                     self->set_response(res);
                     self->write_response();
                 });
@@ -1189,17 +1189,17 @@ void connection_t::process_client_req_rate_limited() {
     } else {
         request_handler_.process_client_req(
             plain_text, [wself = std::weak_ptr<connection_t>{
-                             shared_from_this()}](loki::Response res) {
+                             shared_from_this()}](gyuanx::Response res) {
                 // // A connection could have been destroyed by the deadline
                 // timer
                 auto self = wself.lock();
                 if (!self) {
-                    LOKI_LOG(debug, "Connection is no longer valid, dropping "
+                    GYUANX_LOG(debug, "Connection is no longer valid, dropping "
                                     "proxy response");
                     return;
                 }
 
-                LOKI_LOG(debug, "Respond to a non-long polling client");
+                GYUANX_LOG(debug, "Respond to a non-long polling client");
                 self->set_response(res);
                 self->write_response();
             });
@@ -1222,11 +1222,11 @@ void connection_t::register_deadline() {
         // sure we close the socket (and unsubscribe from notifications)
         // elsewhere if we cancel it.
         if (ec) {
-            LOKI_LOG(error, "Deadline timer error [{}]: {}", ec.value(),
+            GYUANX_LOG(error, "Deadline timer error [{}]: {}", ec.value(),
                      ec.message());
         }
 
-        LOKI_LOG(debug, "[{}] Closing [connection_t] socket due to timeout",
+        GYUANX_LOG(debug, "[{}] Closing [connection_t] socket due to timeout",
                  self->conn_idx);
         self->clean_up();
     });
@@ -1244,18 +1244,18 @@ void connection_t::on_shutdown(boost::system::error_code ec) {
         // http://stackoverflow.com/questions/25587403/boost-asio-ssl-async-shutdown-always-finishes-with-an-error
         ec.assign(0, ec.category());
     } else if (ec) {
-        LOKI_LOG(debug, "Could not close ssl stream gracefully, ec: {} ({})",
+        GYUANX_LOG(debug, "Could not close ssl stream gracefully, ec: {} ({})",
                  ec.message(), ec.value());
     }
 
     const auto sockfd = stream_.lowest_layer().native_handle();
-    LOKI_LOG(trace, "Close https socket: {}", sockfd);
+    GYUANX_LOG(trace, "Close https socket: {}", sockfd);
     get_net_stats().record_socket_close(sockfd);
     stream_.lowest_layer().close();
 }
 
 void connection_t::on_get_stats() {
-    this->body_stream_ << gnode_.get_stats_for_session_client();
+    this->body_stream_ << service_node_.get_stats_for_session_client();
     this->response_.result(http::status::ok);
 }
 
@@ -1276,7 +1276,7 @@ HttpClientSession::HttpClientSession(boost::asio::io_context& ioc,
 void HttpClientSession::on_connect() {
 
     const auto sockfd = socket_.native_handle();
-    LOKI_LOG(trace, "Open http socket: {}", sockfd);
+    GYUANX_LOG(trace, "Open http socket: {}", sockfd);
     get_net_stats().record_socket_open(sockfd);
     http::async_write(socket_, *req_,
                       std::bind(&HttpClientSession::on_write,
@@ -1286,15 +1286,15 @@ void HttpClientSession::on_connect() {
 
 void HttpClientSession::on_write(error_code ec, size_t bytes_transferred) {
 
-    LOKI_LOG(trace, "on write");
+    GYUANX_LOG(trace, "on write");
     if (ec) {
-        LOKI_LOG(error, "Http error on write, ec: {}. Message: {}", ec.value(),
+        GYUANX_LOG(error, "Http error on write, ec: {}. Message: {}", ec.value(),
                  ec.message());
         trigger_callback(SNodeError::ERROR_OTHER, nullptr);
         return;
     }
 
-    LOKI_LOG(trace, "Successfully transferred {} bytes", bytes_transferred);
+    GYUANX_LOG(trace, "Successfully transferred {} bytes", bytes_transferred);
 
     // Receive the HTTP response
     http::async_read(socket_, buffer_, res_,
@@ -1306,7 +1306,7 @@ void HttpClientSession::on_read(error_code ec, size_t bytes_transferred) {
 
     if (!ec || (ec == http::error::end_of_stream)) {
 
-        LOKI_LOG(trace, "Successfully received {} bytes.", bytes_transferred);
+        GYUANX_LOG(trace, "Successfully received {} bytes.", bytes_transferred);
 
         if (http::to_status_class(res_.result_int()) ==
             http::status_class::successful) {
@@ -1314,7 +1314,7 @@ void HttpClientSession::on_read(error_code ec, size_t bytes_transferred) {
                 std::make_shared<std::string>(res_.body());
             trigger_callback(SNodeError::NO_ERROR, std::move(body));
         } else {
-            LOKI_LOG(error, "Http request failed, error code: {}",
+            GYUANX_LOG(error, "Http request failed, error code: {}",
                      res_.result_int());
             trigger_callback(SNodeError::HTTP_ERROR, nullptr);
         }
@@ -1322,7 +1322,7 @@ void HttpClientSession::on_read(error_code ec, size_t bytes_transferred) {
     } else {
 
         if (ec != boost::asio::error::operation_aborted) {
-            LOKI_LOG(error, "Error on read: {}. Message: {}", ec.value(),
+            GYUANX_LOG(error, "Error on read: {}. Message: {}", ec.value(),
                      ec.message());
         }
         trigger_callback(SNodeError::ERROR_OTHER, nullptr);
@@ -1338,13 +1338,13 @@ void HttpClientSession::start() {
             // where we have more context
 
             if (ec == boost::system::errc::connection_refused) {
-                LOKI_LOG(debug,
+                GYUANX_LOG(debug,
                          "[http client]: could not connect to {}:{}, message: "
                          "{} ({})",
                          endpoint_.address().to_string(), endpoint_.port(),
                          ec.message(), ec.value());
             } else {
-                LOKI_LOG(error,
+                GYUANX_LOG(error,
                          "[http client]: could not connect to {}:{}, message: "
                          "{} ({})",
                          endpoint_.address().to_string(), endpoint_.port(),
@@ -1363,13 +1363,13 @@ void HttpClientSession::start() {
         [self = shared_from_this()](const error_code& ec) {
             if (ec) {
                 if (ec != boost::asio::error::operation_aborted) {
-                    LOKI_LOG(
+                    GYUANX_LOG(
                         error,
                         "Deadline timer failed in http client session [{}: {}]",
                         ec.value(), ec.message());
                 }
             } else {
-                LOKI_LOG(debug, "client socket timed out");
+                GYUANX_LOG(debug, "client socket timed out");
                 self->clean_up();
             }
         });
@@ -1377,7 +1377,7 @@ void HttpClientSession::start() {
 
 void HttpClientSession::trigger_callback(SNodeError error,
                                          std::shared_ptr<std::string>&& body) {
-    LOKI_LOG(trace, "Trigger callback");
+    GYUANX_LOG(trace, "Trigger callback");
     ioc_.post(std::bind(callback_, sn_response_t{error, body, std::nullopt}));
     used_callback_ = true;
     deadline_timer_.cancel();
@@ -1388,7 +1388,7 @@ void HttpClientSession::clean_up() {
     if (!needs_cleanup) {
         // This can happen because the deadline timer
         // triggered and cleaned up the connection already
-        LOKI_LOG(debug, "No need for cleanup");
+        GYUANX_LOG(debug, "No need for cleanup");
         return;
     }
 
@@ -1396,7 +1396,7 @@ void HttpClientSession::clean_up() {
 
     if (!socket_.is_open()) {
         /// This should never happen!
-        LOKI_LOG(critical, "Socket is already closed");
+        GYUANX_LOG(critical, "Socket is already closed");
         return;
     }
 
@@ -1408,7 +1408,7 @@ void HttpClientSession::clean_up() {
     socket_.shutdown(tcp::socket::shutdown_both, ec);
     // not_connected happens sometimes so don't bother reporting it.
     if (ec && ec != boost::system::errc::not_connected) {
-        LOKI_LOG(error, "Socket shutdown failure [{}: {}]", ec.value(),
+        GYUANX_LOG(error, "Socket shutdown failure [{}: {}]", ec.value(),
                  ec.message());
     }
 
@@ -1416,10 +1416,10 @@ void HttpClientSession::clean_up() {
     socket_.close(ec);
 
     if (ec) {
-        LOKI_LOG(error, "Closing socket {} failed [{}: {}]", sockfd, ec.value(),
+        GYUANX_LOG(error, "Closing socket {} failed [{}: {}]", sockfd, ec.value(),
                  ec.message());
     } else {
-        LOKI_LOG(trace, "Close http socket: {}", sockfd);
+        GYUANX_LOG(trace, "Close http socket: {}", sockfd);
         get_net_stats().record_socket_close(sockfd);
     }
 }
@@ -1443,23 +1443,23 @@ HttpClientSession::~HttpClientSession() {
 /// | <4 bytes>: N | <N bytes>: ciphertext | <rest>: json as utf8 |
 auto parse_combined_payload(const std::string& payload) -> CiphertextPlusJson {
 
-    LOKI_LOG(trace, "Parsing payload of length: {}", payload.size());
+    GYUANX_LOG(trace, "Parsing payload of length: {}", payload.size());
 
     auto it = payload.begin();
 
     /// First 4 bytes as number
     if (payload.size() < 4) {
-        LOKI_LOG(warn, "Unexpected payload size");
+        GYUANX_LOG(warn, "Unexpected payload size");
         throw std::exception();
     }
 
     const auto b1 = reinterpret_cast<const uint32_t&>(*it);
     const auto n = boost::endian::little_to_native(b1);
 
-    LOKI_LOG(trace, "Ciphertext length: {}", n);
+    GYUANX_LOG(trace, "Ciphertext length: {}", n);
 
     if (payload.size() < 4 + n) {
-        LOKI_LOG(warn, "Unexpected payload size");
+        GYUANX_LOG(warn, "Unexpected payload size");
         throw std::exception();
     }
 
@@ -1467,13 +1467,13 @@ auto parse_combined_payload(const std::string& payload) -> CiphertextPlusJson {
 
     const auto ciphertext = std::string(it, it + n);
 
-    LOKI_LOG(debug, "ciphertext length: {}", ciphertext.size());
+    GYUANX_LOG(debug, "ciphertext length: {}", ciphertext.size());
 
     const auto json_blob = std::string(it + n, payload.end());
 
-    LOKI_LOG(debug, "json blob: (len: {})", json_blob.size());
+    GYUANX_LOG(debug, "json blob: (len: {})", json_blob.size());
 
     return CiphertextPlusJson{ciphertext, json_blob};
 }
 
-} // namespace loki
+} // namespace gyuanx

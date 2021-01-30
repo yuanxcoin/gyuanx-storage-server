@@ -11,7 +11,7 @@ add_library(httpserver_lib STATIC
     main.cpp
     http_connection.cpp
     swarm.cpp
-    gnode.cpp
+    service_node.cpp
     serialization.cpp
     rate_limiter.cpp
     https_client.cpp
@@ -25,13 +25,13 @@ add_library(httpserver_lib STATIC
     onion_processing.cpp
     )
 
-loki_add_subdirectory(../common common)
-loki_add_subdirectory(../storage storage)
-loki_add_subdirectory(../utils utils)
-loki_add_subdirectory(../pow pow)
-loki_add_subdirectory(../crypto crypto)
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "disable shared libraries") # Tells loki-mq to do a static build
-loki_add_subdirectory(../vendors/loki-mq loki-mq EXCLUDE_FROM_ALL)
+gyuanx_add_subdirectory(../common common)
+gyuanx_add_subdirectory(../storage storage)
+gyuanx_add_subdirectory(../utils utils)
+gyuanx_add_subdirectory(../pow pow)
+gyuanx_add_subdirectory(../crypto crypto)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "disable shared libraries") # Tells gyuanx-mq to do a static build
+gyuanx_add_subdirectory(../vendors/gyuanx-mq gyuanx-mq EXCLUDE_FROM_ALL)
 find_package(OpenSSL REQUIRED)
 
 find_package(Boost
@@ -51,7 +51,7 @@ target_link_libraries(httpserver_lib PUBLIC storage)
 target_link_libraries(httpserver_lib PUBLIC utils)
 target_link_libraries(httpserver_lib PUBLIC pow)
 target_link_libraries(httpserver_lib PUBLIC crypto)
-target_link_libraries(httpserver_lib PUBLIC lokimq::lokimq)
+target_link_libraries(httpserver_lib PUBLIC gyuanxmq::gyuanxmq)
 
 set_property(TARGET httpserver_lib PROPERTY CXX_STANDARD 17)
 set_property(TARGET httpserver_lib PROPERTY CXX_STANDARD_REQUIRED TRUE)

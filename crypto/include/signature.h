@@ -4,7 +4,7 @@
 
 #include <array>
 
-namespace loki {
+namespace gyuanx {
 
 constexpr size_t HASH_SIZE = 32;
 constexpr size_t EC_SCALAR_SIZE = 32;
@@ -26,4 +26,4 @@ bool check_signature(const std::string& signature, const hash& hash,
 bool check_signature(const signature& sig, const hash& prefix_hash,
                      const public_key_t& pub);
 
-} // namespace loki
+} // namespace gyuanx

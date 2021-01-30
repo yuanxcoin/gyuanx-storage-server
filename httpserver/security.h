@@ -4,7 +4,7 @@
 
 #include <boost/filesystem/path.hpp>
 
-namespace loki {
+namespace gyuanx {
 
 struct gyuanxd_key_pair_t;
 
@@ -22,4 +22,4 @@ class Security {
     std::string cert_signature_;
     boost::filesystem::path base_path_;
 };
-} // namespace loki
+} // namespace gyuanx

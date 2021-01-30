@@ -1,11 +1,11 @@
 #include "command_line.h"
-#include "loki_logger.h"
+#include "gyuanx_logger.h"
 
 #include <boost/filesystem.hpp>
 
 #include <iostream>
 
-namespace loki {
+namespace gyuanx {
 
 namespace po = boost::program_options;
 namespace fs = boost::filesystem;

@@ -1,11 +1,11 @@
 #include "serialization.h"
-#include "gnode.h"
+#include "service_node.h"
 
 #include <boost/test/unit_test.hpp>
 
 #include <string>
 
-using namespace loki;
+using namespace gyuanx;
 
 BOOST_AUTO_TEST_SUITE(serialization)
 

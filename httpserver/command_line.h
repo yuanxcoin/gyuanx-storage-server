@@ -3,7 +3,7 @@
 #include <boost/program_options.hpp>
 #include <string>
 
-namespace loki {
+namespace gyuanx {
 
 struct command_line_options {
     uint16_t port;
@@ -38,4 +38,4 @@ class command_line_parser {
     std::string binary_name_;
 };
 
-} // namespace loki
+} // namespace gyuanx

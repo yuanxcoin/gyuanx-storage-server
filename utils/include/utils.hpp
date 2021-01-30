@@ -22,7 +22,7 @@ bool parseTimestamp(const std::string& timestampString, const uint64_t ttl,
 // Get current time in milliseconds
 uint64_t get_time_ms();
 
-// adapted from Lokinet llarp/encode.hpp
+// adapted from Gyuanxnet llarp/encode.hpp
 // from  https://en.wikipedia.org/wiki/Base32#z-base-32
 static const char zbase32_alpha[] = {'y', 'b', 'n', 'd', 'r', 'f', 'g', '8',
                                      'e', 'j', 'k', 'm', 'c', 'p', 'q', 'x',

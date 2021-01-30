@@ -1,15 +1,15 @@
 #include "request_handler.h"
 #include "channel_encryption.hpp"
 #include "http_connection.h"
-#include "loki_logger.h"
-#include "gnode.h"
+#include "gyuanx_logger.h"
+#include "service_node.h"
 #include "utils.hpp"
 
 #include "https_client.h"
 
 using nlohmann::json;
 
-namespace loki {
+namespace gyuanx {
 
 constexpr size_t MAX_MESSAGE_BODY = 102400; // 100 KB limit
 
@@ -28,9 +28,9 @@ std::string to_string(const Response& res) {
 }
 
 RequestHandler::RequestHandler(boost::asio::io_context& ioc, ServiceNode& sn,
-                               const LokidClient& gyuanxd_client,
+                               const GyuanxdClient& gyuanxd_client,
                                const ChannelEncryption<std::string>& ce)
-    : ioc_(ioc), gnode_(sn), gyuanxd_client_(gyuanxd_client),
+    : ioc_(ioc), service_node_(sn), gyuanxd_client_(gyuanxd_client),
       channel_cipher_(ce) {}
 
 static json snodes_to_json(const std::vector<sn_record_t>& snodes) {
@@ -64,10 +64,10 @@ static std::string obfuscate_pubkey(const std::string& pk) {
 Response RequestHandler::handle_wrong_swarm(const user_pubkey_t& pubKey) {
 
     const std::vector<sn_record_t> nodes =
-        gnode_.get_snodes_by_pk(pubKey);
+        service_node_.get_snodes_by_pk(pubKey);
     const json res_body = snodes_to_json(nodes);
 
-    LOKI_LOG(trace, "Got client request to a wrong swarm");
+    GYUANX_LOG(trace, "Got client request to a wrong swarm");
 
     return Response{Status::MISDIRECTED_REQUEST, res_body.dump(),
                     ContentType::json};
@@ -81,7 +81,7 @@ Response RequestHandler::process_store(const json& params) {
     for (const auto& field : fields) {
         if (!params.contains(field)) {
 
-            LOKI_LOG(debug, "Bad client request: no `{}` field", field);
+            GYUANX_LOG(debug, "Bad client request: no `{}` field", field);
             return Response{
                 Status::BAD_REQUEST,
                 fmt::format("invalid json: no `{}` field\n", field)};
@@ -94,7 +94,7 @@ Response RequestHandler::process_store(const json& params) {
         params.at("timestamp").get_ref<const std::string&>();
     const auto& data = params.at("data").get_ref<const std::string&>();
 
-    LOKI_LOG(trace, "Storing message: {}", data);
+    GYUANX_LOG(trace, "Storing message: {}", data);
 
     bool created;
     auto pk =
@@ -103,12 +103,12 @@ Response RequestHandler::process_store(const json& params) {
     if (!created) {
         auto msg = fmt::format("Pubkey must be {} characters long\n",
                                get_user_pubkey_size());
-        LOKI_LOG(debug, "{}", msg);
+        GYUANX_LOG(debug, "{}", msg);
         return Response{Status::BAD_REQUEST, std::move(msg)};
     }
 
     if (data.size() > MAX_MESSAGE_BODY) {
-        LOKI_LOG(debug, "Message body too long: {}", data.size());
+        GYUANX_LOG(debug, "Message body too long: {}", data.size());
 
         auto msg =
             fmt::format("Message body exceeds maximum allowed length of {}\n",
@@ -116,19 +116,19 @@ Response RequestHandler::process_store(const json& params) {
         return Response{Status::BAD_REQUEST, std::move(msg)};
     }
 
-    if (!gnode_.is_pubkey_for_us(pk)) {
+    if (!service_node_.is_pubkey_for_us(pk)) {
         return this->handle_wrong_swarm(pk);
     }
 
     uint64_t ttlInt;
     if (!util::parseTTL(ttl, ttlInt)) {
-        LOKI_LOG(debug, "Forbidden. Invalid TTL: {}", ttl);
+        GYUANX_LOG(debug, "Forbidden. Invalid TTL: {}", ttl);
         return Response{Status::FORBIDDEN, "Provided TTL is not valid.\n"};
     }
 
     uint64_t timestampInt;
     if (!util::parseTimestamp(timestamp, ttlInt, timestampInt)) {
-        LOKI_LOG(debug, "Forbidden. Invalid Timestamp: {}", timestamp);
+        GYUANX_LOG(debug, "Forbidden. Invalid Timestamp: {}", timestamp);
         return Response{Status::NOT_ACCEPTABLE,
                         "Timestamp error: check your clock\n"};
     }
@@ -138,13 +138,13 @@ Response RequestHandler::process_store(const json& params) {
 
     const bool valid_pow =
         checkPoW(nonce, timestamp, ttl, pk.str(), data, messageHash,
-                 gnode_.get_curr_pow_difficulty());
+                 service_node_.get_curr_pow_difficulty());
 #ifndef DISABLE_POW
     if (!valid_pow) {
-        LOKI_LOG(debug, "Forbidden. Invalid PoW nonce: {}", nonce);
+        GYUANX_LOG(debug, "Forbidden. Invalid PoW nonce: {}", nonce);
 
         json res_body;
-        res_body["difficulty"] = gnode_.get_curr_pow_difficulty();
+        res_body["difficulty"] = service_node_.get_curr_pow_difficulty();
 
         return Response{Status::INVALID_POW, res_body.dump(),
                         ContentType::json};
@@ -156,9 +156,9 @@ Response RequestHandler::process_store(const json& params) {
     try {
         const auto msg =
             message_t{pk.str(), data, messageHash, ttlInt, timestampInt, nonce};
-        success = gnode_.process_store(msg);
+        success = service_node_.process_store(msg);
     } catch (std::exception e) {
-        LOKI_LOG(critical,
+        GYUANX_LOG(critical,
                  "Internal Server Error. Could not store message for {}",
                  obfuscate_pubkey(pk.str()));
         return Response{Status::INTERNAL_SERVER_ERROR, e.what()};
@@ -166,16 +166,16 @@ Response RequestHandler::process_store(const json& params) {
 
     if (!success) {
 
-        LOKI_LOG(warn, "Service node is initializing");
+        GYUANX_LOG(warn, "Service node is initializing");
         return Response{Status::SERVICE_UNAVAILABLE,
                         "Service node is initializing\n"};
     }
 
-    LOKI_LOG(trace, "Successfully stored message for {}",
+    GYUANX_LOG(trace, "Successfully stored message for {}",
              obfuscate_pubkey(pk.str()));
 
     json res_body;
-    res_body["difficulty"] = gnode_.get_curr_pow_difficulty();
+    res_body["difficulty"] = service_node_.get_curr_pow_difficulty();
 
     return Response{Status::OK, res_body.dump(), ContentType::json};
 }
@@ -184,7 +184,7 @@ Response RequestHandler::process_retrieve_all() {
 
     std::vector<storage::Item> all_entries;
 
-    bool res = gnode_.get_all_messages(all_entries);
+    bool res = service_node_.get_all_messages(all_entries);
 
     if (!res) {
         return Response{Status::INTERNAL_SERVER_ERROR,
@@ -209,7 +209,7 @@ Response RequestHandler::process_retrieve_all() {
 Response RequestHandler::process_snodes_by_pk(const json& params) const {
 
     if (!params.contains("pubKey")) {
-        LOKI_LOG(debug, "Bad client request: no `pubKey` field");
+        GYUANX_LOG(debug, "Bad client request: no `pubKey` field");
         return Response{Status::BAD_REQUEST,
                         "invalid json: no `pubKey` field\n"};
     }
@@ -221,17 +221,17 @@ Response RequestHandler::process_snodes_by_pk(const json& params) const {
 
         auto msg = fmt::format("Pubkey must be {} characters long\n",
                                get_user_pubkey_size());
-        LOKI_LOG(debug, "{}", msg);
+        GYUANX_LOG(debug, "{}", msg);
         return Response{Status::BAD_REQUEST, std::move(msg)};
     }
 
-    const std::vector<sn_record_t> nodes = gnode_.get_snodes_by_pk(pk);
+    const std::vector<sn_record_t> nodes = service_node_.get_snodes_by_pk(pk);
 
-    LOKI_LOG(debug, "Snodes by pk size: {}", nodes.size());
+    GYUANX_LOG(debug, "Snodes by pk size: {}", nodes.size());
 
     const json res_body = snodes_to_json(nodes);
 
-    LOKI_LOG(debug, "Snodes by pk: {}", res_body.dump());
+    GYUANX_LOG(debug, "Snodes by pk: {}", res_body.dump());
 
     return Response{Status::OK, res_body.dump(), ContentType::json};
 }
@@ -243,7 +243,7 @@ Response RequestHandler::process_retrieve(const json& params) {
     for (const auto& field : fields) {
         if (!params.contains(field)) {
             auto msg = fmt::format("invalid json: no `{}` field", field);
-            LOKI_LOG(debug, "{}", msg);
+            GYUANX_LOG(debug, "{}", msg);
             return Response{Status::BAD_REQUEST, std::move(msg)};
         }
     }
@@ -256,11 +256,11 @@ Response RequestHandler::process_retrieve(const json& params) {
 
         auto msg = fmt::format("Pubkey must be {} characters long\n",
                                get_user_pubkey_size());
-        LOKI_LOG(debug, "{}", msg);
+        GYUANX_LOG(debug, "{}", msg);
         return Response{Status::BAD_REQUEST, std::move(msg)};
     }
 
-    if (!gnode_.is_pubkey_for_us(pk)) {
+    if (!service_node_.is_pubkey_for_us(pk)) {
         return this->handle_wrong_swarm(pk);
     }
 
@@ -271,18 +271,18 @@ Response RequestHandler::process_retrieve(const json& params) {
 
     std::vector<storage::Item> items;
 
-    if (!gnode_.retrieve(pk.str(), last_hash, items)) {
+    if (!service_node_.retrieve(pk.str(), last_hash, items)) {
 
         auto msg = fmt::format(
             "Internal Server Error. Could not retrieve messages for {}",
             obfuscate_pubkey(pk.str()));
-        LOKI_LOG(critical, "{}", msg);
+        GYUANX_LOG(critical, "{}", msg);
 
         return Response{Status::INTERNAL_SERVER_ERROR, std::move(msg)};
     }
 
     if (!items.empty()) {
-        LOKI_LOG(trace, "Successfully retrieved messages for {}",
+        GYUANX_LOG(trace, "Successfully retrieved messages for {}",
                  obfuscate_pubkey(pk.str()));
     }
 
@@ -304,46 +304,46 @@ Response RequestHandler::process_retrieve(const json& params) {
 }
 
 void RequestHandler::process_client_req(
-    const std::string& req_json, std::function<void(loki::Response)> cb) {
+    const std::string& req_json, std::function<void(gyuanx::Response)> cb) {
 
-    LOKI_LOG(trace, "process_client_req str <{}>", req_json);
+    GYUANX_LOG(trace, "process_client_req str <{}>", req_json);
 
     const json body = json::parse(req_json, nullptr, false);
     if (body == nlohmann::detail::value_t::discarded) {
-        LOKI_LOG(debug, "Bad client request: invalid json");
+        GYUANX_LOG(debug, "Bad client request: invalid json");
         cb(Response{Status::BAD_REQUEST, "invalid json\n"});
     }
 
-    LOKI_LOG(trace, "process_client_req json <{}>", body.dump(2));
+    GYUANX_LOG(trace, "process_client_req json <{}>", body.dump(2));
 
     const auto method_it = body.find("method");
     if (method_it == body.end() || !method_it->is_string()) {
-        LOKI_LOG(debug, "Bad client request: no method field");
+        GYUANX_LOG(debug, "Bad client request: no method field");
         cb(Response{Status::BAD_REQUEST, "invalid json: no `method` field\n"});
     }
 
     const auto& method_name = method_it->get_ref<const std::string&>();
 
-    LOKI_LOG(trace, "  - method name: {}", method_name);
+    GYUANX_LOG(trace, "  - method name: {}", method_name);
 
     const auto params_it = body.find("params");
     if (params_it == body.end() || !params_it->is_object()) {
-        LOKI_LOG(debug, "Bad client request: no params field");
+        GYUANX_LOG(debug, "Bad client request: no params field");
         cb(Response{Status::BAD_REQUEST, "invalid json: no `params` field\n"});
     }
 
     if (method_name == "store") {
-        LOKI_LOG(debug, "Process client request: store");
+        GYUANX_LOG(debug, "Process client request: store");
         cb(this->process_store(*params_it));
 
     } else if (method_name == "retrieve") {
-        LOKI_LOG(debug, "Process client request: retrieve");
+        GYUANX_LOG(debug, "Process client request: retrieve");
         cb(this->process_retrieve(*params_it));
         // TODO: maybe we should check if (some old) clients requests
         // long-polling and then wait before responding to prevent spam
 
     } else if (method_name == "get_snodes_for_pubkey") {
-        LOKI_LOG(debug, "Process client request: snodes for pubkey");
+        GYUANX_LOG(debug, "Process client request: snodes for pubkey");
         cb(this->process_snodes_by_pk(*params_it));
     } else if (method_name == "get_lns_mapping") {
 
@@ -355,7 +355,7 @@ void RequestHandler::process_client_req(
         }
 
     } else {
-        LOKI_LOG(debug, "Bad client request: unknown method '{}'", method_name);
+        GYUANX_LOG(debug, "Bad client request: unknown method '{}'", method_name);
         cb(Response{Status::BAD_REQUEST,
                     fmt::format("no method {}", method_name)});
     }
@@ -387,7 +387,7 @@ Response RequestHandler::wrap_proxy_response(const Response& res,
 }
 
 void RequestHandler::process_lns_request(
-    std::string name_hash, std::function<void(loki::Response)> cb) {
+    std::string name_hash, std::function<void(gyuanx::Response)> cb) {
 
     json params;
     json array = json::array();
@@ -424,11 +424,11 @@ void RequestHandler::process_lns_request(
 
 void RequestHandler::process_onion_exit(
     const std::string& eph_key, const std::string& body,
-    std::function<void(loki::Response)> cb) {
+    std::function<void(gyuanx::Response)> cb) {
 
-    LOKI_LOG(debug, "Processing onion exit!");
+    GYUANX_LOG(debug, "Processing onion exit!");
 
-    if (!gnode_.snode_ready()) {
+    if (!service_node_.snode_ready()) {
         cb({Status::SERVICE_UNAVAILABLE, "Snode not ready"});
         return;
     }
@@ -438,9 +438,9 @@ void RequestHandler::process_onion_exit(
 
 void RequestHandler::process_proxy_exit(
     const std::string& client_key, const std::string& payload,
-    std::function<void(loki::Response)> cb) {
+    std::function<void(gyuanx::Response)> cb) {
 
-    if (!gnode_.snode_ready()) {
+    if (!service_node_.snode_ready()) {
         auto res = Response{Status::SERVICE_UNAVAILABLE, "Snode not ready"};
         cb(wrap_proxy_response(res, client_key, false));
         return;
@@ -450,7 +450,7 @@ void RequestHandler::process_proxy_exit(
 
     int idx = proxy_idx++;
 
-    LOKI_LOG(debug, "[{}] Process proxy exit", idx);
+    GYUANX_LOG(debug, "[{}] Process proxy exit", idx);
 
     std::string plaintext;
 
@@ -458,7 +458,7 @@ void RequestHandler::process_proxy_exit(
         plaintext = channel_cipher_.decrypt_cbc(payload, client_key);
     } catch (const std::exception& e) {
         auto msg = fmt::format("Invalid ciphertext: {}", e.what());
-        LOKI_LOG(debug, "{}", msg);
+        GYUANX_LOG(debug, "{}", msg);
         auto res = Response{Status::BAD_REQUEST, std::move(msg)};
 
         // TODO: since we always seem to encrypt the response, we should
@@ -476,28 +476,28 @@ void RequestHandler::process_proxy_exit(
         body = req.at("body").get<std::string>();
 
         if (req.find("headers") != req.end()) {
-            if (req.at("headers").find(LOKI_LONG_POLL_HEADER) !=
+            if (req.at("headers").find(GYUANX_LONG_POLL_HEADER) !=
                 req.at("headers").end()) {
                 lp_used =
-                    req.at("headers").at(LOKI_LONG_POLL_HEADER).get<bool>();
+                    req.at("headers").at(GYUANX_LONG_POLL_HEADER).get<bool>();
             }
         }
 
     } catch (std::exception& e) {
         auto msg = fmt::format("JSON parsing error: {}", e.what());
-        LOKI_LOG(debug, "[{}] {}", idx, msg);
+        GYUANX_LOG(debug, "[{}] {}", idx, msg);
         auto res = Response{Status::BAD_REQUEST, msg};
         cb(wrap_proxy_response(res, client_key, false /* use cbc */));
         return;
     }
 
     if (lp_used) {
-        LOKI_LOG(debug, "Long polling requested over a proxy request");
+        GYUANX_LOG(debug, "Long polling requested over a proxy request");
     }
 
     this->process_client_req(
-        body, [this, cb = std::move(cb), client_key, idx](loki::Response res) {
-            LOKI_LOG(debug, "[{}] proxy about to respond with: {}", idx,
+        body, [this, cb = std::move(cb), client_key, idx](gyuanx::Response res) {
+            GYUANX_LOG(debug, "[{}] proxy about to respond with: {}", idx,
                      res.status());
 
             cb(wrap_proxy_response(res, client_key, false /* use cbc */));
@@ -506,7 +506,7 @@ void RequestHandler::process_proxy_exit(
 
 void RequestHandler::process_onion_to_url(
     const std::string& host, const std::string& target,
-    const std::string& payload, std::function<void(loki::Response)> cb) {
+    const std::string& payload, std::function<void(gyuanx::Response)> cb) {
 
     // TODO: investigate if the use of a shared pointer is necessary
     auto req = std::make_shared<request_t>();
@@ -521,14 +521,14 @@ void RequestHandler::process_onion_to_url(
     // `cb` needs to be adapted for http request
     auto http_cb = [cb = std::move(cb)](sn_response_t res) {
         if (res.error_code == SNodeError::NO_ERROR) {
-            cb(loki::Response{Status::OK, *res.body});
+            cb(gyuanx::Response{Status::OK, *res.body});
         } else {
-            LOKI_LOG(debug, "Loki server error: {}", res.error_code);
-            cb(loki::Response{Status::BAD_REQUEST, "Loki Server error"});
+            GYUANX_LOG(debug, "Gyuanx server error: {}", res.error_code);
+            cb(gyuanx::Response{Status::BAD_REQUEST, "Gyuanx Server error"});
         }
     };
 
     make_https_request(ioc_, host, req, http_cb);
 }
 
-} // namespace loki
+} // namespace gyuanx

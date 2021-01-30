@@ -13,7 +13,7 @@
 #include <boost/circular_buffer.hpp>
 #include <boost/thread/thread.hpp>
 
-#include "loki_common.h"
+#include "gyuanx_common.h"
 #include "gyuanxd_key.h"
 #include "pow.hpp"
 #include "reachability_testing.h"
@@ -23,18 +23,18 @@
 static constexpr size_t BLOCK_HASH_CACHE_SIZE = 30;
 static constexpr int STORAGE_SERVER_HARDFORK = 12;
 static constexpr int ENFORCED_REACHABILITY_HARDFORK = 13;
-static constexpr int LOKIMQ_ONION_HARDFORK = 15;
+static constexpr int GYUANXMQ_ONION_HARDFORK = 15;
 
 class Database;
 
 namespace http = boost::beast::http;
 using request_t = http::request<http::string_body>;
 
-namespace lokimq {
+namespace gyuanxmq {
 struct ConnectionID;
 }
 
-namespace loki {
+namespace gyuanx {
 
 namespace storage {
 struct Item;
@@ -44,8 +44,8 @@ struct sn_response_t;
 struct blockchain_test_answer_t;
 struct bc_test_params_t;
 
-class LokidClient;
-class LokimqServer;
+class GyuanxdClient;
+class GyuanxmqServer;
 
 namespace ss_client {
 class Request;
@@ -121,7 +121,7 @@ class ServiceNode {
     int hardfork_ = 0;
     uint64_t block_height_ = 0;
     uint64_t target_height_ = 0;
-    const LokidClient& gyuanxd_client_;
+    const GyuanxdClient& gyuanxd_client_;
     std::string block_hash_;
     std::unique_ptr<Swarm> swarm_;
     std::unique_ptr<Database> db_;
@@ -149,12 +149,12 @@ class ServiceNode {
     /// Used to periodially send messages from relay_buffer_
     boost::asio::steady_timer relay_timer_;
 
-    loki::gyuanxd_key_pair_t gyuanxd_key_pair_;
+    gyuanx::gyuanxd_key_pair_t gyuanxd_key_pair_;
 
     // Need to make sure we only use this to get lmq() object and
     // not call any method that would in turn call a method in SN
     // causing a deadlock
-    LokimqServer& lmq_server_;
+    GyuanxmqServer& lmq_server_;
 
     reachability_records_t reach_records_;
 
@@ -229,7 +229,7 @@ class ServiceNode {
                                   bc_test_params_t params, uint64_t test_height,
                                   blockchain_test_answer_t answer);
 
-    /// Report `sn` to Lokid as unreachable
+    /// Report `sn` to Gyuanxd as unreachable
     void report_node_reachability(const sn_pub_key_t& sn, bool reachable);
 
     void process_storage_test_response(const sn_record_t& testee,
@@ -260,10 +260,10 @@ class ServiceNode {
   public:
     ServiceNode(boost::asio::io_context& ioc,
                 boost::asio::io_context& worker_ioc, uint16_t port,
-                LokimqServer& lmq_server,
-                const loki::gyuanxd_key_pair_t& key_pair,
+                GyuanxmqServer& lmq_server,
+                const gyuanx::gyuanxd_key_pair_t& key_pair,
                 const std::string& ed25519hex, const std::string& db_location,
-                LokidClient& gyuanxd_client, const bool force_start);
+                GyuanxdClient& gyuanxd_client, const bool force_start);
 
     ~ServiceNode();
 
@@ -346,4 +346,4 @@ class ServiceNode {
     find_node_by_ed25519_pk(const std::string& pk) const;
 };
 
-} // namespace loki
+} // namespace gyuanx

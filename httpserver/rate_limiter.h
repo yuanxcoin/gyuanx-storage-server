@@ -43,5 +43,5 @@ class RateLimiter {
     // Add tokens based on the amount of time elapsed
     void fill_bucket(TokenBucket& bucket,
                      std::chrono::steady_clock::time_point now,
-                     bool gnode = false);
+                     bool service_node = false);
 };

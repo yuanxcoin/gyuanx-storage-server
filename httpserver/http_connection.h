@@ -15,15 +15,15 @@
 #include <boost/filesystem.hpp>
 #include <boost/format.hpp>
 
-#include "loki_common.h"
+#include "gyuanx_common.h"
 #include "gyuanxd_key.h"
 #include "swarm.h"
 
-constexpr auto LOKI_SENDER_SNODE_PUBKEY_HEADER = "X-Loki-Snode-PubKey";
-constexpr auto LOKI_SNODE_SIGNATURE_HEADER = "X-Loki-Snode-Signature";
-constexpr auto LOKI_SENDER_KEY_HEADER = "X-Sender-Public-Key";
-constexpr auto LOKI_TARGET_SNODE_KEY = "X-Target-Snode-Key";
-constexpr auto LOKI_LONG_POLL_HEADER = "X-Loki-Long-Poll";
+constexpr auto GYUANX_SENDER_SNODE_PUBKEY_HEADER = "X-Gyuanx-Snode-PubKey";
+constexpr auto GYUANX_SNODE_SIGNATURE_HEADER = "X-Gyuanx-Snode-Signature";
+constexpr auto GYUANX_SENDER_KEY_HEADER = "X-Sender-Public-Key";
+constexpr auto GYUANX_TARGET_SNODE_KEY = "X-Target-Snode-Key";
+constexpr auto GYUANX_LONG_POLL_HEADER = "X-Gyuanx-Long-Poll";
 
 template <typename T>
 class ChannelEncryption;
@@ -36,7 +36,7 @@ namespace ssl = boost::asio::ssl;    // from <boost/asio/ssl.hpp>
 using request_t = http::request<http::string_body>;
 using response_t = http::response<http::string_body>;
 
-namespace loki {
+namespace gyuanx {
 
 std::shared_ptr<request_t> build_post_request(const char* target,
                                               std::string&& data);
@@ -92,14 +92,14 @@ struct bc_test_params_t {
 
 using http_callback_t = std::function<void(sn_response_t)>;
 
-class LokidClient {
+class GyuanxdClient {
 
     boost::asio::io_context& ioc_;
     std::string gyuanxd_rpc_ip_;
     const uint16_t gyuanxd_rpc_port_;
 
   public:
-    LokidClient(boost::asio::io_context& ioc, std::string ip, uint16_t port);
+    GyuanxdClient(boost::asio::io_context& ioc, std::string ip, uint16_t port);
     void make_gyuanxd_request(std::string_view method,
                             const nlohmann::json& params,
                             http_callback_t&& cb) const;
@@ -194,7 +194,7 @@ class connection_t : public std::enable_shared_from_this<connection_t> {
     bool delay_response_ = false;
 
     // TODO: remove SN, only use Reqeust Handler as a mediator
-    ServiceNode& gnode_;
+    ServiceNode& service_node_;
 
     RequestHandler& request_handler_;
 
@@ -316,13 +316,13 @@ void run(boost::asio::io_context& ioc, const std::string& ip, uint16_t port,
 
 constexpr const char* error_string(SNodeError err) {
     switch (err) {
-    case loki::SNodeError::NO_ERROR:
+    case gyuanx::SNodeError::NO_ERROR:
         return "NO_ERROR";
-    case loki::SNodeError::ERROR_OTHER:
+    case gyuanx::SNodeError::ERROR_OTHER:
         return "ERROR_OTHER";
-    case loki::SNodeError::NO_REACH:
+    case gyuanx::SNodeError::NO_REACH:
         return "NO_REACH";
-    case loki::SNodeError::HTTP_ERROR:
+    case gyuanx::SNodeError::HTTP_ERROR:
         return "HTTP_ERROR";
     default:
         return "[UNKNOWN]";
@@ -337,12 +337,12 @@ struct CiphertextPlusJson {
 // TODO: move this from http_connection.h after refactoring
 auto parse_combined_payload(const std::string& payload) -> CiphertextPlusJson;
 
-} // namespace loki
+} // namespace gyuanx
 
 namespace fmt {
 
 template <>
-struct formatter<loki::SNodeError> {
+struct formatter<gyuanx::SNodeError> {
 
     template <typename ParseContext>
     constexpr auto parse(ParseContext& ctx) {
@@ -350,7 +350,7 @@ struct formatter<loki::SNodeError> {
     }
 
     template <typename FormatContext>
-    auto format(const loki::SNodeError& err, FormatContext& ctx) {
+    auto format(const gyuanx::SNodeError& err, FormatContext& ctx) {
         return format_to(ctx.out(), error_string(err));
     }
 };
